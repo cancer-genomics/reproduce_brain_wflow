@@ -1,5 +1,5 @@
 ---
-title: "Home"
+title: "Detection of brain cancer using genome-wide cell-free DNA fragmentation profiles and repeat landscapes"
 site: workflowr::wflow_site
 output:
   workflowr::wflow_html:
@@ -8,4 +8,29 @@ editor_options:
   chunk_output_type: console
 ---
 
-Welcome to my research website.
+
+#### Abstract
+Most patients with brain cancer are diagnosed at late stages and the development of blood-based assays for detecting brain tumors earlier have been largely unsuccessful.  In this study, we analyzed genome-wide cell-free (cfDNA) fragmentation profiles and repeat landscapes from the plasma of 505 individuals with and without brain cancer.  Machine learning analyses identified individuals with brain cancer with sensitivities of 62% (95% CI=38%-86%) for lower grade gliomas (grade I and II) and 72% (95% CI=63%-83%) for high-grade gliomas (grade III and IV) at 90% specificity.  These results were validated in an independent prospectively collected cohort.  We found that cfDNA fragmentome changes in patients with gliomas represented a combination of the epigenetic landscape of glioma cells and systemic white blood cell changes in the circulation.  These analyses highlight the unique properties of cfDNA in patients with brain cancer and open new avenues for noninvasive detection of these individuals.   
+
+Keywords: brain cancer, liquid biopsy, cfDNA fragmentation, glioblastoma 
+
+[Figure 1](../docs/Figure1.html)
+
+[Figure 2](../docs/Figure2.html)
+
+[Figure 3](../docs/Figure3.html)
+
+[Figure 4](../docs/Figure4.html)
+
+[Supplementary Figure 1](../docs/FigureS1.html)
+
+[Supplementary Figure 2](../docs/FigureS2.html)
+
+[Supplementary Figure 3](../docs/FigureS3.html)
+
+[Supplementary Figure 4](../docs/FigureS4.html)
+
+[Supplementary Figure 5](../docs/FigureS5.html)
+
+[Supplementary Figure 6](../docs/FigureS6.html)
+

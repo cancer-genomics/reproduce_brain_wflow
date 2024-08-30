@@ -1,3 +1,3 @@
 # Code
 
-Save command-line scripts and shared R code here.
+Please see the individual README files under the subdirectories for details.

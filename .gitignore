@@ -9,3 +9,12 @@ analysis/*png
 analysis/*html
 analysis/*_cache
 analysis/site_libs
+analysis/score_regression.Rmd
+data/updated_meta_07_03_2024.xlsx
+data/updated_meta_07_23_2024.xlsx
+docs/assets/Figure1_to_be_fixed.png
+docs/assets/FigureS1_to_be_fixed.png
+docs/figure/score_regression.Rmd/*
+output/02-artemis-delfi/score-regression.txt
+output/02-artemis-delfi/scores_export.txt
+output/04-decifer/main/*backup*
