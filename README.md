@@ -1,13 +1,11 @@
 ---
 title: "Detection of brain cancer using genome-wide cell-free DNA fragmentation profiles and repeat landscapes"
 author: ""
-date: "30 August, 2024"
+date: "09 September, 2024"
 output:
   html_document:
     keep_md: yes
 ---
-
-[The contents of this repository will become publicly available on 09/04/2024]
 
 The current repository contains the analysis source code for the manuscript on brain cancer detection using genome-wide cell-free DNA by Mathios et al. It is structured following the workflowr framework, where it can be built to generate report pages including all the figures and code.
 
@@ -23,6 +21,20 @@ Here is an overview of the directory structure:
 
 * output: This directory includes the results from training the ARTEMIS-DELFI model, and running the decifer analysis as R objects or text files.
 
+
+The `docs` directory includes index.html, which contains links to the code and figures from the manuscript. You need to clone this repository and open this file to view it on your browser or
+you can use this [link](https://cancer-genomics.github.io/brain_wflow) to view the results without cloning or rebuilding the analysis.
+
+#### Installation Note
+
+The package versions used in the repository are managed by [renv](https://rstudio.github.io/renv/articles/renv.html). 
+After cloning the repo and starting an R session in the project directory, renv will be downloaded and installed. 
+renv will print any conflicts between the installed package versions and the renv lock file. 
+Follow the suggestions printed to install the missing packages. The `renv::status()` function can be used to identify version conflicts between the repository and the installed packages, 
+while the `renv::restore()` function can be used to restore the versions used in the repository.
+
+#### Getting Started
+
 To reproduce the figures and tables in Mathios et al.
 
 
@@ -35,3 +47,21 @@ wflow_build("analysis/*.Rmd")
 ```r
 wflow_publish("analysis/*.Rmd")
 ```
+
+#### Preprocessing
+
+Following list of READMEs explain the preprocessing steps, ARTEMIS-DELFI training and DECIFER analysis and mention any external data used (if any).
+
+[Preprocessing](code/00-preprocess/README.md)
+
+[rbrain](code/01-rbrain/README.md)
+
+[ARTEMIS-DELFI](code/02-artemis-delfi/README.md)
+
+[DECIFER](code/04-decifer/README.md)
+
+#### Data
+
+The data used in the analysis is deposited with EGA accession number XYZ.
+
+
