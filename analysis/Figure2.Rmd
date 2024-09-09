@@ -1,0 +1,791 @@
+---
+title: "Figure 2. Score Distribution and Model Performance"
+site: workflowr::wflow_site
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  workflowr::wflow_html:
+    code_folding: hide
+    toc: true
+editor_options:
+  chunk_output_type: console
+---
+
+```{r caching, echo=FALSE}
+knitr::opts_chunk$set(autodep = TRUE)
+```
+
+```{r packages, message=FALSE, warning=FALSE, echo = FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(RColorBrewer)
+library(ggfortify)
+library(ggh4x)
+library(ggpubr)
+library(latex2exp)
+library(data.table)
+library(reshape2)
+library(cowplot)
+library(pROC)
+library(here)
+```
+
+```{r load.data, echo = FALSE, message=FALSE, warning=FALSE}
+# [1] load input data
+
+load(here('output', '01-rbrain', 'metadata.rda'))
+load(here('output', '02-artemis-delfi', 'scores.rda'))
+
+training.ids = metadata %>% filter(training == TRUE) %>% pull(alternate_id)
+heldout.ids = metadata %>% filter(heldout == TRUE) %>% pull(alternate_id)
+validation.ids = metadata %>% filter(validation == TRUE) %>% pull(alternate_id)
+
+scores$training = scores$id %in% training.ids
+```
+
+```{r functions, echo = FALSE, message=FALSE, warning=FALSE}
+# [2] define functions
+
+prep_roc <- function(test, col, title){
+  test$score = test[,col]
+  roc.obj <- pROC::roc(test$type, test$score)
+  auc.array    <- ci.auc(roc.obj, conf.level=0.95, method="delong")
+  formattedAUC <- paste0( sprintf('%0.2f', auc.array[2]), ' (', sprintf('%0.2f', auc.array[1]), ',', sprintf('%0.2f', auc.array[3]), ')')
+  
+  base <- data.frame(label = paste0(title, formattedAUC), sens = roc.obj$sensitivities, spec = roc.obj$specificities, 
+                     thresh = roc.obj$thresholds) %>% arrange(sens)
+  
+  m <- c(roc.obj$auc)
+  names(m) <- c('AUC')
+  return(list(data = base, metrics = m))
+}
+
+plot_roc <- function(data, title= '', colors = c('#BEBDBE','#5481B1','#E93324','#773324', "#E5F5E0","#A1D99B","#31A354"), legend.label = 'Approach - AUC (95% CI)'){
+    
+    data %>%
+    ggplot(aes(x = spec, y = sens, color = label)) + 
+    geom_vline(xintercept = c(0.95, 0.90), lty = 1, col = '#EEEEEE') + 
+    geom_abline(intercept = 1, slope = 1, lty = 1, col = '#EEEEEE') + 
+    geom_line(linewidth = 0.5) + 
+    scale_x_reverse(expand = c(0.005,0.05)) +
+    scale_y_continuous(expand= c(0.005,0.05)) +
+    theme_classic() +
+    scale_color_manual(values = colors, name = legend.label) + 
+    labs(title = title, x = 'Specificity', y = 'Sensitivity') 
+}
+    
+```
+
+```{r score_distribution, echo = FALSE, message=FALSE, warning=FALSE}
+# [3] score distribution subfigure
+
+base <- metadata %>% 
+        select(alternate_id, type, training, validation, heldout,exclude,drop, pathology._simplified,  ki67.simplified,  mri.enhancement) %>% 
+        filter(validation == FALSE & drop == FALSE)
+
+#----------------------------------#
+base$ki67 = factor(base$ki67.simplified, levels = c('<=20%', '>20%'))
+#----------------------------------#
+base$pseudoprogression = NA
+base$pseudoprogression[base$pathology._simplified == 'Pseudoprogression'] = 'Pseudoprogression'
+base$pseudoprogression[base$pathology._simplified == 'Rec Grade IV'] = 'Rec Grade IV'
+base$pseudoprogression = factor(base$pseudoprogression, levels = c("Pseudoprogression", "Rec Grade IV"))
+#----------------------------------#
+base$mri = NA
+base$mri[base$mri.enhancement == 'YES'] = 'Present'
+base$mri[base$mri.enhancement == 'NO'] = 'Absent'
+#----------------------------------#
+base = merge(base, 
+             scores %>% select(id, artemis.delfi, copynumber), 
+             by.x = 'alternate_id', 
+             by.y = 'id', 
+             all.x = TRUE)
+
+#----------------------------------#
+pd = base %>% 
+     dplyr::rename(pathology.type = pathology._simplified)
+
+pd$pathology.label = NA
+pd$pathology.label[pd$pathology.type == 'Healthy'] = 'Screening\nPopulation Controls'
+pd$pathology.label[pd$pathology.type == 'Trigeminal neuralgia'] = 'Non-neoplastic\nNeurological Controls'
+pd$pathology.label[pd$pathology.type == 'Non-cancerous CNS Disease'] = 'Non-neoplastic\nNeurological Controls'
+pd$pathology.label[pd$pathology.type == 'Grade I'] = 'LG Glioma\nI/II'
+pd$pathology.label[pd$pathology.type == 'Grade II'] = 'LG Glioma\nI/II'
+pd$pathology.label[pd$pathology.type == 'Grade III'] =  'HG Glioma\nIII'
+pd$pathology.label[pd$pathology.type == 'Grade IV'] =  'GBM\nIV'
+pd$pathology.label[pd$pathology.type == 'Rec Grade IV'] = 'Rec GBM\nIV'
+pd$pathology.label[pd$pathology.type == "Metastasis"] = "Other Cancers\nBrain Metastases"
+pd$pathology.label[pd$pathology.type == "CNS Lymphoma"] = "Other Cancers\nBrain Metastases"
+
+pd <- pd %>% 
+      filter(! is.na(pathology.label))
+#----------------------------------#
+
+pd = pd %>% 
+     group_by(pathology.label) %>%
+     mutate(n = n()) %>% 
+     unite('pathology.assigned', pathology.label:n, sep = '\n(n = ', remove = FALSE) %>%
+     mutate(pathology.assigned = paste0(pathology.assigned, ')')) %>% 
+     ungroup()
+
+pd$pathology.label = factor(pd$pathology.label, 
+                            levels = c('Screening\nPopulation Controls', 
+                                       'Non-neoplastic\nNeurological Controls' , 
+                                       'LG Glioma\nI/II' ,
+                                       'HG Glioma\nIII', 
+                                       'GBM\nIV', 
+                                       'Rec GBM\nIV', 
+                                       "Other Cancers\nBrain Metastases"))
+pd <- pd %>% arrange(pathology.label)
+pd$pathology.assigned = factor(pd$pathology.assigned, levels = unique(pd$pathology.assigned))
+
+
+pd$pathology.group = rep(NA, nrow(pd))
+pd[pd$pathology.label %in% c('Screening\nPopulation Controls', 'Non-neoplastic\nNeurological Controls'), 'pathology.group'] = 'Non-Cancer'
+pd[pd$pathology.label %in% c('LG Glioma\nI/II',  'HG Glioma\nIII', 'GBM\nIV','Rec GBM\nIV'), 'pathology.group'] = 'Cancer Grade'
+pd[pd$pathology.label %in% c("Other Cancers\nBrain Metastases", 'CNS Lymphoma'), 'pathology.group'] = 'Other malignancies'
+pd$pathology.group = factor(pd$pathology.group, levels = c('Non-Cancer','Cancer Grade',  'Other malignancies'))
+
+main = pd %>% dplyr::rename(xp = pathology.assigned, group = pathology.group)
+
+#----------------------------------#
+# compare the scores from each category to that of screening population
+# or non-neoplastic neurological controls
+pval.df = data.frame()
+ref.groups = main %>% filter(grepl('Control', xp)) %>% pull(xp) %>% unique() %>% sort() %>% as.character()
+test.groups = main %>% filter(! grepl('Control', xp)) %>% pull(xp) %>% unique() %>% sort() %>% as.character()
+
+for (ref in ref.groups){
+  for (test in test.groups){
+    x = main %>% filter(xp == ref) %>% pull(artemis.delfi)
+    y =  main %>% filter(xp == test) %>% pull(artemis.delfi)
+    ref.label = strsplit(ref, '\\(')[[1]][1] %>% gsub('\n', ' ', .) %>% gsub(' $', '', .) %>% gsub(' Controls', '', .)
+    pval.df = rbind(pval.df, data.frame(xp = test, ref = ref.label, pval = wilcox.test(x,y)$p.value))
+  }
+}
+# add the comparison between the two control groups
+ref = ref.groups[1]
+test = ref.groups[2]
+x = main %>% filter(xp == ref) %>% pull(artemis.delfi)
+y =  main %>% filter(xp == test) %>% pull(artemis.delfi)
+ref.label = strsplit(ref, '\\(')[[1]][1] %>% gsub('\n', ' ', .) %>% gsub(' $', '', .) %>% gsub(' Controls', '', .)
+pval.df = rbind(pval.df, data.frame(xp = test, ref = ref.label, pval = wilcox.test(x,y)$p.value))
+#----------------------------------#
+# format the pvalue df for proper display
+pval.df$xp = factor(pval.df$xp, levels = levels(main$xp))
+pval.df$ref = factor(pval.df$ref, levels = c('Screening Population', 'Non-neoplastic Neurological'))
+pval.df = pval.df %>% arrange(xp, ref)
+
+pval.df$label = NA
+pval.df$label[pval.df$pval < 1e-9] = '$p < 10^{-9}$'
+pval.df$label[pval.df$pval  > 1e-9 & pval.df$pval < 1e-3] = '$p < 10^{-3}$'
+pval.df$label[pval.df$pval > 1e-3] = paste0('$', sprintf('p=%0.2f', pval.df$pval[pval.df$pval > 1e-3]), '$')
+
+pval.df$y = NA
+pval.df$y[pval.df$ref == 'Screening Population'] = 1.1
+pval.df$y[pval.df$ref != 'Screening Population'] = 1.05
+
+pval.df = merge(pval.df, main %>% select(xp, group) %>% unique(), by = 'xp', all.x = TRUE)
+#------------------------------------#
+part.a = ggplot(main, aes(x = interaction(xp, group), y = artemis.delfi)) + 
+    geom_boxplot(width = 0.2, outlier.colour = NA, fill = '#7570b3', alpha = 0.3, size = 0.7) + 
+    geom_jitter(width = 0.10, color = '#7570b3', size= 0.75, alpha = 0.5) + 
+    labs(x = '', y = 'ARTEMIS-DELFI Score')  + 
+    theme_pubr() + 
+    scale_x_discrete(NULL, guide = "axis_nested")  + 
+    scale_y_continuous(breaks = seq(0,4) * 0.25, limits = c(-0.01, 1.15), expand = c(0,0))
+
+part.a = part.a + 
+         geom_text(data= pval.df , aes(x = interaction(xp, group), 
+                   label = TeX(label,output = 'character'), y = y, color = ref), size = 5, parse = TRUE) +
+         scale_color_manual(values = c('#3182bd',  '#ad4e4e'), name = 'Reference Group') +
+         theme(legend.position = c(0.10, 0.94), legend.title = element_text(size = 12), 
+               legend.text = element_text(size = 12), legend.background = element_blank(),  
+               legend.box.background = element_blank()) + 
+         guides(color = guide_legend(override.aes = aes(label = ""))) +
+         geom_segment(color = '#3182bd', x = 0.67 , xend = 0.77, y = 1.0755, yend = 1.0755) + 
+         geom_segment(color = '#ad4e4e', x = 0.67 , xend = 0.77, y = 1.035, yend = 1.035)
+
+
+DT::datatable(pval.df)
+
+DT::datatable(main %>% group_by(pathology.label) %>% summarize(n = n(), score =median(artemis.delfi)))
+```
+
+```{r roc_training, echo = FALSE, message=FALSE, warning=FALSE}
+
+base$type = factor(base$type, levels = c('healthy', 'cancer'))
+
+ad.pd <- prep_roc(subset(base, alternate_id %in% training.ids), 'artemis.delfi', 'ARTEMIS-DELFI - ')
+cn.pd <- prep_roc(subset(base, alternate_id %in% training.ids), 'copynumber', 'Chr Copy Number (ML) - ')
+
+# plot.data <- rbind(ad.pd$data, cn.pd$data)
+plot.data = ad.pd$data
+plot.data$label = factor(plot.data$label, levels = unique(plot.data$label))
+
+theme_adj = theme(legend.position = c(0.60, 0.15), plot.title = element_text(hjust = 0.5,size = 13),
+                  legend.text = element_text(size = 8),
+                  legend.title = element_text(size = 8),
+                  axis.title = element_text(size = 13),
+          legend.background = element_blank())
+    
+part.b1 = plot_roc(plot.data, 'Training Set (All Grades)', colors = c('#7570b3', '#aaaaaa')) + 
+    theme_pubr() + 
+    theme_adj + 
+  theme(legend.text = element_text(size = 11.5), legend.title = element_text(size= 11.5))
+    
+#--------------------------------------------#
+early.ids = base %>% 
+            filter(training == TRUE  & 
+                   pathology._simplified %in% c('Grade I', 'Grade II', 'Healthy', 'Trigeminal neuralgia', 'Non-cancerous CNS Disease')) %>%
+            pull(alternate_id)
+
+cn.pd <- prep_roc(subset(base, alternate_id %in% early.ids), 'copynumber', 'Chr Copy Number (ML) - ')
+ad.pd <- prep_roc(subset(base, alternate_id %in% early.ids), 'artemis.delfi', 'ARTEMIS-DELFI - ')
+
+# plot.data <- rbind(ad.pd$data,  cn.pd$data)
+plot.data = ad.pd$data
+plot.data$label = factor(plot.data$label, levels = unique(plot.data$label))
+
+part.b2.i_ii = plot_roc(plot.data, 'I/II', colors = c('#7570b3',  '#aaaaaa'),  legend.label = '') +
+    theme_pubr() + 
+    theme_adj
+#--------------------------------------------#
+iii.ids = base %>% 
+            filter(training == TRUE  & 
+                   pathology._simplified %in% c('Grade III', 'Healthy', 'Trigeminal neuralgia', 'Non-cancerous CNS Disease')) %>%
+            pull(alternate_id)
+
+cn.pd <- prep_roc(subset(base, alternate_id %in% iii.ids), 'copynumber', 'Chr Copy Number (ML) - ')
+ad.pd <- prep_roc(subset(base, alternate_id %in% iii.ids), 'artemis.delfi', 'ARTEMIS-DELFI - ')
+
+# plot.data <- rbind(ad.pd$data,  cn.pd$data)
+plot.data = ad.pd$data
+plot.data$label = factor(plot.data$label, levels = unique(plot.data$label))
+
+part.b3.iii = plot_roc(plot.data, 'III', colors = c('#7570b3',  '#aaaaaa'),  legend.label = '') +
+    theme_pubr() + 
+    theme_adj
+#--------------------------------------------#
+iv.ids = base %>% 
+          filter(training == TRUE  & 
+                 pathology._simplified %in% c('Grade IV', 'Healthy', 'Trigeminal neuralgia', 'Non-cancerous CNS Disease')) %>%
+            pull(alternate_id)
+
+cn.pd <- prep_roc(subset(base, alternate_id %in% iv.ids), 'copynumber', 'Chr Copy Number (ML) - ')
+ad.pd <- prep_roc(subset(base, alternate_id %in% iv.ids), 'artemis.delfi', 'ARTEMIS-DELFI - ')
+
+# plot.data <- rbind(ad.pd$data,  cn.pd$data)
+plot.data = ad.pd$data
+plot.data$label = factor(plot.data$label, levels = unique(plot.data$label))
+
+part.b4.iv = plot_roc(plot.data, 'IV', colors = c('#7570b3',  '#aaaaaa'),  legend.label = '') +
+    theme_pubr() + 
+    theme_adj
+#--------------------------------------------#
+rec_iv.ids = base %>% 
+          filter(training == TRUE  & 
+                 pathology._simplified %in% c('Rec Grade IV', 'Healthy', 'Trigeminal neuralgia', 'Non-cancerous CNS Disease')) %>%
+            pull(alternate_id)
+
+cn.pd <- prep_roc(subset(base, alternate_id %in% rec_iv.ids), 'copynumber', 'Chr Copy Number (ML) - ')
+ad.pd <- prep_roc(subset(base, alternate_id %in% rec_iv.ids), 'artemis.delfi', 'ARTEMIS-DELFI - ')
+
+# plot.data <- rbind(ad.pd$data,  cn.pd$data)
+plot.data = ad.pd$data
+
+plot.data$label = factor(plot.data$label, levels = unique(plot.data$label))
+
+part.b5.rec_iv = plot_roc(plot.data, 'Recurrent (IV)', colors = c('#7570b3',  '#aaaaaa'),  legend.label = '') +
+    theme_pubr() + 
+    theme_adj
+#--------------------------------------------#
+p.left = plot_grid(part.b2.i_ii, 
+                   part.b3.iii, 
+                   part.b4.iv, 
+                   part.b5.rec_iv, 
+                   ncol = 2, align = 'hv', axis = 'tblr')
+
+part.b = plot_grid(part.b1, p.left, rel_widths = c(0.75, 1))
+```
+
+```{r score_distribution_validation, echo = FALSE, message = FALSE, warning = FALSE}
+
+exclusions = c()
+
+validation <- metadata %>% 
+        select(alternate_id, type, training, validation, heldout, pathology._simplified,  
+               ki67.simplified,  mri.enhancement) %>% 
+        filter(validation == TRUE)
+
+validation$pathology._simplified = factor(validation$pathology._simplified, 
+                                          levels = c('Control', 'Grade I', 'Grade II', 'Grade IV',
+                                                     'Meningioma', 'Miscelleneous tumors', 'Metastasis'))
+
+validation = merge(validation, 
+                   scores %>% select(id, artemis.delfi), by.x = 'alternate_id', by.y = 'id', all.x = TRUE)
+
+validation = validation %>% 
+             filter(! alternate_id %in% 
+                      exclusions)
+
+
+validation$pathology.label = NA
+validation$pathology.label[validation$pathology._simplified == 'Control'] = 'Non-neoplastic\nNeurological Controls'
+validation$pathology.label[validation$pathology._simplified %in% c('Grade I', 'Grade II', 'Grade III', 'Grade IV')] = 'Gliomas/GBM' 
+validation$pathology.label[validation$pathology._simplified == "Metastasis"] = "Other Cancers\nBrain Metastases"
+
+validation$pathology.label = factor(validation$pathology.label, 
+                                    levels = c('Non-neoplastic\nNeurological Controls',
+                                               'Gliomas/GBM' ,"Other Cancers\nBrain Metastases"))
+
+validation = validation %>% 
+              arrange(pathology.label) %>% 
+              group_by(pathology.label) %>% 
+              mutate(n = n())  %>% 
+              ungroup() %>% 
+              data.frame() %>% 
+              mutate(xlab = paste(pathology.label, '\nn=', n, sep = ''))  %>% 
+              mutate(xlab = factor(xlab, levels = unique(xlab)))
+
+p = wilcox.test(validation %>% filter(grepl('GBM', pathology.label)) %>% pull(artemis.delfi),
+                validation %>% filter(grepl('Control', pathology.label)) %>% pull(artemis.delfi))$p.val
+
+annot.df = data.frame(xlab = validation %>% filter(grepl('GBM', pathology.label)) %>% pull(xlab),
+                      y = 1.05, 
+                      label = ifelse(p < 1e-03, '$p < 10^{-3}$', '$p > 10^{-3}$')) %>% 
+           unique()
+ 
+
+part.c =  ggplot(validation , aes(x = xlab, y = artemis.delfi)) + 
+    geom_boxplot(width = 0.2, outlier.colour = NA, fill = '#1b9e77', alpha = 0.3, size = 0.7) + 
+    geom_jitter(width = 0.10, color = '#1b9e77', size= 0.75, alpha = 0.5) + 
+    labs(x = '', y = 'ARTEMIS-DELFI Score', title = 'Independent Validation Set') + 
+    theme_pubr() + 
+    geom_text(data= annot.df, aes(x = xlab,  y = y, label = TeX(label, output = 'character')), size = 4.5, color =  '#ad4e4e', parse =TRUE) + 
+    theme(plot.title = element_text(hjust =0.5)) + 
+  scale_y_continuous(limits = c(0,1.15), expand = c(0,0) )
+
+```
+
+```{r performance, echo = FALSE, message = FALSE, warning = FALSE}
+base <- metadata %>% 
+        select(alternate_id, type, training, validation, heldout, exclude,drop, 
+               pathology._simplified,  ki67.simplified,  mri.enhancement) %>%
+        filter(training == TRUE | validation == TRUE) %>%
+        filter(drop == FALSE)
+
+base = merge(base, scores %>% select(id, artemis.delfi, copynumber), by.x = 'alternate_id', by.y = 'id', all.x = TRUE)
+base$type = factor(base$type, levels = c('healthy', 'cancer'))
+base$pathology._simplified = as.character(base$pathology._simplified)
+
+training = base %>% 
+           filter(training == TRUE) %>% 
+           select(alternate_id, type, pathology._simplified, artemis.delfi, copynumber)
+validation = base %>% 
+             filter(validation == TRUE) %>% select(alternate_id, type, 
+                                                   pathology._simplified, artemis.delfi, copynumber) %>% 
+             filter(pathology._simplified %in% c('Control', 'Grade I', 'Grade II', 'Grade IV')) %>%
+             filter(! alternate_id %in% exclusions)
+             
+#---------------------------#
+formatAUC <- function(x) paste0( sprintf('%0.2f', x[2]), ' (', sprintf('%0.2f', x[1]), ',', sprintf('%0.2f', x[3]), ')')
+#---------------------------#
+
+# define performance table and corresponding thresholds
+
+# define thresholds for specific sensitivity using the entire training set
+
+input.data = training
+
+set.seed(1)
+ad = ci.se(pROC::roc(input.data$type, input.data$artemis.delfi), spec = c(0.95, 0.90)) %>% data.frame() %>% rownames_to_column('spec') %>% mutate(model = 'ARTEMIS-DELFI')
+set.seed(1)
+cn = ci.se(pROC::roc(input.data$type, input.data$copynumber), spec = c(0.95, 0.90)) %>% data.frame() %>% rownames_to_column('spec') %>% mutate(model = 'Chr Copy Number (ML)')
+
+set.seed(1)
+ad.auc.array <- ci.auc(pROC::roc(input.data$type, input.data$artemis.delfi), conf.level=0.95, method="delong")
+set.seed(1)
+cn.auc.array <- ci.auc(pROC::roc(input.data$type, input.data$copynumber), conf.level=0.95, method="delong")
+auc.df = data.frame(model = c('ARTEMIS-DELFI', 'Chr Copy Number (ML)'),
+                    auc = c(formatAUC(ad.auc.array), formatAUC(cn.auc.array)))
+
+
+out = rbind(ad, cn) 
+colnames(out)[2:4] = c('ci.lb', 'sens', 'ci.ub')
+out$ci.lb = round(out$ci.lb, 2)
+out$ci.ub = round(out$ci.ub, 2)
+out$sens = round(out$sens, 2)
+
+out = merge(out, auc.df, by = 'model', all.x = TRUE)
+
+out = out %>% select(model, spec, sens, ci.lb, ci.ub, auc) %>% unite('sens.ci', ci.lb:ci.ub, sep = '-', remove = TRUE) %>% arrange(spec)
+
+ad.x = prep_roc(subset(input.data, alternate_id %in% training.ids), 'artemis.delfi', 'ARTEMIS-DELFI')$data
+
+tab = data.frame(model = c('ARTEMIS-DELFI', 'ARTEMIS-DELFI'),
+                 samples = 'Training Set',
+                 spec = c(0.95, 0.90),
+                 threshold = round(c(approxfun(ad.x$spec, ad.x$thresh)(0.95), 
+                                approxfun(ad.x$spec, ad.x$thresh)(0.90)),3))
+tab = merge(out, tab, by = c('model', 'spec'), all.x = TRUE)
+tab[tab$model == "Chr Copy Number (ML)", "threshold"] = "-"
+tab[tab$model == "Chr Copy Number (ML)", "samples"] = "Training Set"
+
+
+#-------#
+input.data = training %>% filter(alternate_id %in% early.ids)
+
+set.seed(1)
+ad = ci.se(pROC::roc(input.data$type, input.data$artemis.delfi), spec = c(0.95, 0.90)) %>% data.frame() %>% rownames_to_column('spec') %>% mutate(model = 'ARTEMIS-DELFI')
+set.seed(1)
+cn = ci.se(pROC::roc(input.data$type, input.data$copynumber), spec = c(0.95, 0.90)) %>% data.frame() %>% rownames_to_column('spec') %>% mutate(model = 'Chr Copy Number (ML)')
+
+set.seed(1)
+ad.auc.array <- ci.auc(pROC::roc(input.data$type, input.data$artemis.delfi), conf.level=0.95, method="delong")
+set.seed(1)
+cn.auc.array <- ci.auc(pROC::roc(input.data$type, input.data$copynumber), conf.level=0.95, method="delong")
+auc.df = data.frame(model = c('ARTEMIS-DELFI', 'Chr Copy Number (ML)'),
+                    auc = c(formatAUC(ad.auc.array), formatAUC(cn.auc.array)))
+
+out = rbind(ad, cn) 
+colnames(out)[2:4] = c('ci.lb', 'sens', 'ci.ub')
+out$ci.lb = round(out$ci.lb, 2)
+out$ci.ub = round(out$ci.ub, 2)
+out$sens = round(out$sens, 2)
+
+out = merge(out, auc.df, by = 'model', all.x = TRUE)
+
+
+out = out %>% select(model, spec, sens, ci.lb, ci.ub, auc) %>% unite('sens.ci', ci.lb:ci.ub, sep = '-', remove = TRUE) %>% arrange(spec) %>% mutate(samples = 'Grade I/II', threshold = '-')
+
+tab = rbind(tab, out)
+#-------#
+input.data = training %>% filter(alternate_id %in% iii.ids)
+
+set.seed(1)
+ad = ci.se(pROC::roc(input.data$type, input.data$artemis.delfi), spec = c(0.95, 0.90)) %>% data.frame() %>% rownames_to_column('spec') %>% mutate(model = 'ARTEMIS-DELFI')
+set.seed(1)
+cn = ci.se(pROC::roc(input.data$type, input.data$copynumber), spec = c(0.95, 0.90)) %>% data.frame() %>% rownames_to_column('spec') %>% mutate(model = 'Chr Copy Number (ML)')
+
+set.seed(1)
+ad.auc.array <- ci.auc(pROC::roc(input.data$type, input.data$artemis.delfi), conf.level=0.95, method="delong")
+set.seed(1)
+cn.auc.array <- ci.auc(pROC::roc(input.data$type, input.data$copynumber), conf.level=0.95, method="delong")
+auc.df = data.frame(model = c('ARTEMIS-DELFI', 'Chr Copy Number (ML)'),
+                    auc = c(formatAUC(ad.auc.array), formatAUC(cn.auc.array)))
+
+
+out = rbind(ad, cn) 
+colnames(out)[2:4] = c('ci.lb', 'sens', 'ci.ub')
+out$ci.lb = round(out$ci.lb, 2)
+out$ci.ub = round(out$ci.ub, 2)
+out$sens = round(out$sens, 2)
+
+out = merge(out, auc.df, by = 'model', all.x = TRUE)
+
+out = out %>% select(model, spec, sens, ci.lb, ci.ub, auc) %>% unite('sens.ci', ci.lb:ci.ub, sep = '-', remove = TRUE) %>% arrange(spec) %>% mutate(samples = 'Grade III', threshold = '-')
+
+tab = rbind(tab, out)
+#-------#
+input.data = training %>% filter(alternate_id %in% iv.ids)
+
+set.seed(1)
+ad = ci.se(pROC::roc(input.data$type, input.data$artemis.delfi), spec = c(0.95, 0.90)) %>% data.frame() %>% rownames_to_column('spec') %>% mutate(model = 'ARTEMIS-DELFI')
+set.seed(1)
+cn = ci.se(pROC::roc(input.data$type, input.data$copynumber), spec = c(0.95, 0.90)) %>% data.frame() %>% rownames_to_column('spec') %>% mutate(model = 'Chr Copy Number (ML)')
+
+set.seed(1)
+ad.auc.array <- ci.auc(pROC::roc(input.data$type, input.data$artemis.delfi), conf.level=0.95, method="delong")
+set.seed(1)
+cn.auc.array <- ci.auc(pROC::roc(input.data$type, input.data$copynumber), conf.level=0.95, method="delong")
+auc.df = data.frame(model = c('ARTEMIS-DELFI', 'Chr Copy Number (ML)'),
+                    auc = c(formatAUC(ad.auc.array), formatAUC(cn.auc.array)))
+
+out = rbind(ad, cn) 
+colnames(out)[2:4] = c('ci.lb', 'sens', 'ci.ub')
+out$ci.lb = round(out$ci.lb, 2)
+out$ci.ub = round(out$ci.ub, 2)
+out$sens = round(out$sens, 2)
+
+out = merge(out, auc.df, by = 'model', all.x = TRUE)
+
+out = out %>% select(model, spec, sens, ci.lb, ci.ub, auc) %>% unite('sens.ci', ci.lb:ci.ub, sep = '-', remove = TRUE) %>% arrange(spec) %>% mutate(samples = 'Grade IV', threshold = '-')
+
+tab = rbind(tab, out)
+#-------#
+input.data = training %>% filter(alternate_id %in% c(iii.ids, iv.ids))
+
+set.seed(1)
+ad = ci.se(pROC::roc(input.data$type, input.data$artemis.delfi), spec = c(0.95, 0.90)) %>% data.frame() %>% rownames_to_column('spec') %>% mutate(model = 'ARTEMIS-DELFI')
+
+set.seed(1)
+cn = ci.se(pROC::roc(input.data$type, input.data$copynumber), spec = c(0.95, 0.90)) %>% data.frame() %>% rownames_to_column('spec') %>% mutate(model = 'Chr Copy Number (ML)')
+
+set.seed(1)
+ad.auc.array <- ci.auc(pROC::roc(input.data$type, input.data$artemis.delfi), conf.level=0.95, method="delong")
+set.seed(1)
+cn.auc.array <- ci.auc(pROC::roc(input.data$type, input.data$copynumber), conf.level=0.95, method="delong")
+auc.df = data.frame(model = c('ARTEMIS-DELFI', 'Chr Copy Number (ML)'),
+                    auc = c(formatAUC(ad.auc.array), formatAUC(cn.auc.array)))
+
+
+out = rbind(ad, cn) 
+colnames(out)[2:4] = c('ci.lb', 'sens', 'ci.ub')
+out$ci.lb = round(out$ci.lb, 2)
+out$ci.ub = round(out$ci.ub, 2)
+out$sens = round(out$sens, 2)
+
+out = merge(out, auc.df, by = 'model', all.x = TRUE)
+
+out = out %>% select(model, spec, sens, ci.lb, ci.ub, auc) %>% unite('sens.ci', ci.lb:ci.ub, sep = '-', remove = TRUE) %>% arrange(spec) %>% mutate(samples = 'III/IV', threshold = '-')
+
+tab = rbind(tab, out)
+#-------#
+
+input.data = training %>% filter(alternate_id %in% rec_iv.ids)
+
+set.seed(1)
+ad = ci.se(pROC::roc(input.data$type, input.data$artemis.delfi), spec = c(0.95, 0.90)) %>% data.frame() %>% rownames_to_column('spec') %>% mutate(model = 'ARTEMIS-DELFI')
+
+set.seed(1)
+cn = ci.se(pROC::roc(input.data$type, input.data$copynumber), spec = c(0.95, 0.90)) %>% data.frame() %>% rownames_to_column('spec') %>% mutate(model = 'Chr Copy Number (ML)')
+
+set.seed(1)
+ad.auc.array <- ci.auc(pROC::roc(input.data$type, input.data$artemis.delfi), conf.level=0.95, method="delong")
+set.seed(1)
+cn.auc.array <- ci.auc(pROC::roc(input.data$type, input.data$copynumber), conf.level=0.95, method="delong")
+auc.df = data.frame(model = c('ARTEMIS-DELFI', 'Chr Copy Number (ML)'),
+                    auc = c(formatAUC(ad.auc.array), formatAUC(cn.auc.array)))
+
+
+out = rbind(ad, cn) 
+colnames(out)[2:4] = c('ci.lb', 'sens', 'ci.ub')
+out$ci.lb = round(out$ci.lb, 2)
+out$ci.ub = round(out$ci.ub, 2)
+out$sens = round(out$sens, 2)
+
+out = merge(out, auc.df, by = 'model', all.x = TRUE)
+
+
+out = out %>% select(model, spec, sens, ci.lb, ci.ub, auc) %>% unite('sens.ci', ci.lb:ci.ub, sep = '-', remove = TRUE) %>% arrange(spec) %>% mutate(samples = 'Recurrent (IV)', threshold = '-')
+
+tab = rbind(tab, out)
+
+set.thresholds = tab %>% arrange(model, samples,  sens)
+
+DT::datatable(set.thresholds)
+```
+
+```{r performance_summary, echo = FALSE, message = FALSE, warning = FALSE}
+thresh = set.thresholds %>% 
+     filter(model == 'ARTEMIS-DELFI') %>% 
+     filter(spec == 0.90) %>% 
+     filter(samples == "Training Set") %>% 
+     pull(threshold) %>% 
+     as.character() %>% 
+     as.numeric()
+
+pd = data.frame()
+#---------------------#
+# I/II
+tr = training %>% filter(type == 'healthy' | pathology._simplified %in% c('Grade I', 'Grade II', 'Grade I/II'))
+va = validation %>% filter(type == 'healthy' | pathology._simplified %in% c('Grade I', 'Grade II', 'Grade I/II'))
+
+n.tr = tr %>% filter(type != 'healthy') %>% nrow()
+n.va = va %>% filter(type != 'healthy') %>% nrow()
+
+training.roc = roc(tr$type, tr$artemis.delfi)
+validation.roc = roc(va$type, va$artemis.delfi)
+
+set.seed(1)
+training.est.1 = ci.thresholds(training.roc, thresholds = thresh)
+set.seed(1)
+validation.est.1 = ci.thresholds(validation.roc, thresholds = thresh)
+
+pd = rbind(pd, 
+           training.est.1 %>% unlist() %>% as.data.frame() %>% t() %>% 
+                          data.frame() %>% mutate(x = 'I/II', threshold = thresh, source = 'training', n = n.tr),
+           validation.est.1 %>% unlist() %>% as.data.frame() %>% t() %>% 
+                          data.frame() %>% mutate(x = 'I/II', threshold = thresh, source = 'validation', n = n.va))
+#---------------------#
+tr = training %>% filter(type == 'healthy' | pathology._simplified %in% c('Grade IV'))
+va = validation %>% filter(type == 'healthy' | pathology._simplified %in% c('Grade IV'))
+
+n.tr = tr %>% filter(type != 'healthy') %>% nrow()
+n.va = va %>% filter(type != 'healthy') %>% nrow()
+
+training.roc = roc(tr$type, tr$artemis.delfi)
+validation.roc = roc(va$type, va$artemis.delfi)
+
+set.seed(1)
+training.est.1 = ci.thresholds(training.roc, thresholds = thresh)
+set.seed(1)
+validation.est.1 = ci.thresholds(validation.roc, thresholds = thresh)
+
+pd = rbind(pd, 
+           training.est.1 %>% unlist() %>% as.data.frame() %>% t() %>% 
+                          data.frame() %>% mutate(x = 'IV', threshold = thresh, source = 'training', n = n.tr),
+           validation.est.1 %>% unlist() %>% as.data.frame() %>% t() %>% 
+                          data.frame() %>% mutate(x = 'IV', threshold = thresh, source = 'validation', n = n.va))
+#---------------------#
+tr = training %>% filter(type == 'healthy' | pathology._simplified %in% c('Grade III', 'Grade IV'))
+va = validation %>% filter(type == 'healthy' | pathology._simplified %in% c('Grade III', 'Grade IV'))
+
+n.tr = tr %>% filter(type != 'healthy') %>% nrow()
+n.va = va %>% filter(type != 'healthy') %>% nrow()
+
+training.roc = roc(tr$type, tr$artemis.delfi)
+validation.roc = roc(va$type, va$artemis.delfi)
+
+set.seed(1)
+training.est.1 = ci.thresholds(training.roc, thresholds = thresh)
+set.seed(1)
+validation.est.1 = ci.thresholds(validation.roc, thresholds = thresh)
+
+pd = rbind(pd, 
+           training.est.1 %>% unlist() %>% as.data.frame() %>% t() %>% 
+                          data.frame() %>% mutate(x = 'III/IV', threshold = thresh, source = 'training', n = n.tr))
+pd = rbind(pd,
+           validation.est.1 %>% unlist() %>% as.data.frame() %>% t() %>% 
+                          data.frame() %>% mutate(x = 'III/IV', threshold = thresh, source = 'validation', n = n.va))
+
+
+#------------------------#
+
+df1 = pd %>% 
+      filter(threshold == thresh) %>% 
+      dplyr::rename(y = sensitivity2, ymin = sensitivity1, ymax = sensitivity3) %>%
+      select(-contains('spec'))
+df1$metric = 'Sensitivity'
+
+df2 = pd %>% filter(threshold == thresh) %>% 
+      select(-contains('sens')) %>% select(-n, -x,) %>% 
+      group_by(source, threshold) %>% 
+      summarize(specificity1 = mean(specificity1), specificity2 = mean(specificity2) , specificity3 = mean(specificity3)) %>% ungroup()
+
+
+df2$n = NA
+df2$x= 'Non-cancer'
+df2[df2$source == 'validation', 'n'] = validation %>% filter(type == 'healthy' ) %>% nrow()
+df2[df2$source == 'training', 'n'] = training %>% filter(type == 'healthy' ) %>% nrow()
+df2 <- df2 %>% dplyr::rename(y = specificity2, ymin = specificity1, ymax = specificity3) 
+df2$metric = 'Specificity'
+
+w = rbind(df2[,colnames(df1)],df1) %>% filter(x != 'III/IV')
+w$x = factor(w$x, levels = c('Non-cancer', 'I/II', 'IV'))
+w$metric = factor(w$metric, levels = c('Specificity', 'Sensitivity'))
+
+w = w %>% filter(x %in% c('Non-cancer', 'IV'))
+w$x = factor(gsub('IV', 'GBM\nIV', w$x), levels = c('Non-cancer', 'GBM\nIV'))
+
+part.d = ggplot(w, aes(x = x, color = source)) + 
+            geom_errorbar(position = position_dodge(width = 0.3), aes(ymin = ymin, ymax = ymax), width = 0.1) +
+            theme_pubr() + 
+            geom_point(aes(y = y), position = position_dodge(width = 0.3), show.legend = FALSE) + 
+            geom_text(aes(y = ymax + 0.05, label = n),position = position_dodge(width = 0.3), show.legend = FALSE) + 
+            labs(x = '', y = '', color = '') + 
+            facet_wrap(~metric, scales = 'free', strip.position = 'left') + 
+            theme(legend.position = c(0.80, 0.15), 
+                  legend.background = element_blank(),
+                  strip.background = element_blank(), 
+                  strip.placement = 'outside', 
+                  strip.text = element_text(size= 11)) + 
+            scale_y_continuous(breaks = seq(0,5) * 0.20, labels = function(x) paste0(round(x * 100, 0), '%'), 
+                               expand = c(0.0,0.0), limits = c(0,1.05)) + 
+            scale_color_manual(values = c('#7570b3', '#1b9e77')) 
+
+w$ymin = round(w$ymin, 2)
+w$ymax = round(w$ymax, 2)
+w$y = round(w$y, 2)
+
+DT::datatable(w)
+
+```
+
+```{r Figure2, fig.width = 22, fig.height=15, dev = c('png', 'pdf')}
+
+part.b = part.b + theme(plot.margin = margin(t = 0, b = 1.39, l = 0, r = 0, "cm"))
+part.d = part.d + theme(plot.margin = margin(t = 0, b = 1.1, l = 0, r = 0, "cm"))
+
+set.seed(1)
+element = ggplot_gtable(ggplot_build(part.c))
+element$grobs[[6]]$children[[3]]$children[[3]]$children[[1]]$gp$col = NA
+element$grobs[[6]]$children[[3]]$children[[3]]$children[[1]]$gp$fill = NA
+element$grobs[[6]]$children[[3]]$children[[3]]$children[[2]]$children[[1]]$gp$col = NA
+element$grobs[[6]]$children[[3]]$children[[3]]$children[[2]]$children[[1]]$gp$fill = NA
+
+
+
+tr = plot_grid(part.a, labels = c('a'))
+br = plot_grid(part.b, element, part.d,  ncol = 3, rel_widths = c(2, 0.8, 0.7), labels = c('b', 'c', 'd'))
+
+set.seed(1)
+panel = plot_grid(tr, br, nrow = 2)
+plot(panel)
+
+```
+
+
+```{r comparisons, message = FALSE, warning  = FALSE}
+periventricular.tumors = c('CGBR2P_1', 'CGCNS101P_1', 'CGCNS103P_1', 'CGCNS140P_1', 'CGCNS65P_2')
+periventricular.scores = subset(scores, id %in% periventricular.tumors) %>% pull(artemis.delfi)
+
+others = setdiff(metadata %>% filter(validation == FALSE) %>% filter(pathology._simplified %in% c('Grade I', 'Grade II')) %>% pull(alternate_id),
+                 periventricular.tumors)
+others.scores = subset(scores, id %in% others) %>% pull(artemis.delfi)
+
+print('periventricular tumors')
+print(median(periventricular.scores))
+print('other tumors')
+print(median(others.scores))
+
+wilcox.test(others.scores, periventricular.scores)
+
+# 	Wilcoxon rank sum exact test
+# data:  others.scores and periventricular.scores
+# W = 20, p-value = 0.08491
+# alternative hypothesis: true location shift is not equal to 0
+
+#---------------------#
+metadata$key = tolower(metadata$tumor_subset_pathology)
+
+astrocytoma.tumors =  metadata %>% filter(validation == FALSE) %>% filter(grepl('astro', key)) %>% pull(alternate_id)
+oligo.tumors = metadata %>% filter(validation == FALSE) %>% filter(grepl('oligo', key)) %>% pull(alternate_id)
+
+astrocytoma.scores = scores %>% filter(id %in% astrocytoma.tumors) %>% pull(artemis.delfi)
+oligo.scores = scores %>% filter(id %in% oligo.tumors) %>% pull(artemis.delfi)
+
+print('astrocytmas')
+print(median(astrocytoma.scores))
+print('oligodendrogliomas')
+print(median(oligo.scores))
+
+
+wilcox.test(astrocytoma.scores, oligo.scores)
+#---------------------#
+gbm.ids= metadata %>% filter(validation == FALSE) %>% filter(pathology._simplified == 'Grade IV') %>% pull(alternate_id)
+rec.ids= metadata %>% filter(validation == FALSE) %>% filter(pathology._simplified == 'Rec Grade IV') %>% pull(alternate_id)
+
+gbm.scores = scores %>% filter(id %in% gbm.ids) %>% pull(artemis.delfi)
+rec.scores = scores %>% filter(id %in% rec.ids) %>% pull(artemis.delfi)
+
+print('gbm scores')
+print(median(gbm.scores))
+
+print('rec gbm scores')
+print(median(rec.scores))
+
+wilcox.test(gbm.scores, rec.scores)
+#---------------------#
+small.ids = metadata %>% filter(validation == FALSE & type == 'cancer') %>%  filter(! is.na(volume)) %>% filter(volume < 4.19) %>% pull(alternate_id)
+large.ids = metadata %>% filter(validation == FALSE & type == 'cancer') %>%  filter(! is.na(volume)) %>% filter(volume >= 4.19) %>% pull(alternate_id)
+
+small.scores =  scores %>% filter(id %in% small.ids) %>% pull(artemis.delfi)
+print(thresh)
+length(which(small.scores >= thresh))
+print(median(small.scores))
+#---------------------#
+
+
+
+```

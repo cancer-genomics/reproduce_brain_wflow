@@ -1,0 +1,20 @@
+---
+title: "Figure 1. Schematic Overview of the Study"
+site: workflowr::wflow_site
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  workflowr::wflow_html:
+    code_folding: hide
+    toc: true
+editor_options:
+  chunk_output_type: console
+---
+
+```{r caching, echo=FALSE, warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(autodep = TRUE)
+```
+
+```{r Figure1, echo=FALSE, out.width = '100%', warning = FALSE, message = FALSE}
+library(here)
+knitr::include_graphics(here('docs', 'assets', 'Figure1.png'))
+```

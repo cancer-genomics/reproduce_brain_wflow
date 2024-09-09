@@ -1,0 +1,172 @@
+---
+title: "Supplementary Figure 6. Correlation Plots for an Array of Tumor and Tissue Types for cfDNA from the Discovery and the Validation cohorts"
+site: workflowr::wflow_site
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  workflowr::wflow_html:
+    code_folding: hide
+    toc: true
+editor_options:
+  chunk_output_type: console
+---
+
+```{r caching, echo=FALSE}
+knitr::opts_chunk$set(autodep = TRUE)
+```
+
+```{r packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(RColorBrewer)
+library(ggsci)
+library(data.table)
+library(pbapply)
+library(scales)
+library(cowplot)
+library(here)
+```
+
+```{r load.data}
+
+pd = readRDS(here('output', '04-decifer', 'null-brain', 'brain_with_null_plotdata_stats.rds'))
+main = pd$obs
+r = pd$r
+rho = pd$rho
+
+runs = readRDS(here('output', '04-decifer', 'main', 'cohort_rel_cov_tpm_merged_cor_complete.rds'))
+
+types <- sort(unique(as.character(r$type)))
+r$type = factor(r$type, levels = types)
+rho$type = factor(rho$type, levels = types)
+```
+
+
+```{r tfbs.brain_null, warning = FALSE, message = FALSE}
+
+b.types = c('Adult temporal lobe:Astrocyte', 'Adult temporal lobe:Endothelial', 'Adult temporal lobe:Myeloid',
+            'Adult temporal lobe:Oligodendrocyte', 'Adult temporal lobe:Whole cortex')
+
+c.types = c("GSE60424.monocytes", "GSE60424.neutrophils")
+
+d.types = c('BRCA', 'BLCA', 'COAD', 'KIRC', 'LIHC','LUSC',  'LUAD',  'PRAD')
+
+b.pd <- r %>% filter(type %in% b.types)
+b.pd$type = gsub('Adult temporal lobe:', '', gsub('cortex', 'Cortex', b.pd$type))
+b.pd$type = factor(b.pd$type, c('Astrocyte', 'Endothelial', 'Myeloid', 'Oligodendrocyte', 'Whole Cortex'))
+
+b.pd.aux = rbindlist(main) %>% filter(type %in% b.types)
+b.pd.aux$type = gsub('Adult temporal lobe:', '', gsub('cortex', 'Cortex', b.pd.aux$type))
+b.pd.aux$type = factor(b.pd.aux$type, c('Astrocyte', 'Endothelial', 'Myeloid', 'Oligodendrocyte', 'Whole Cortex'))
+
+b.pd.v = runs %>% filter(cohort == 'brain_validation_gbm') %>% filter(type %in% b.types)
+b.pd.v$type = gsub('Adult temporal lobe:', '', gsub('cortex', 'Cortex', b.pd.v$type))
+b.pd.v$type = factor(b.pd.v$type, c('Astrocyte', 'Endothelial', 'Myeloid', 'Oligodendrocyte', 'Whole Cortex'))
+
+
+c.pd <- r %>% filter(type %in% c.types)
+c.pd$type = gsub('lymphocytes', 'Lymphocytes', gsub('GSE60424.', '', gsub('CD4', 'CD4 T-Cells', gsub('CD8', 'CD8 T-Cells', gsub('monocytes', 'Monocytes',
+            gsub('neutrophils', 'Neutrophils', gsub('NK', 'NK Cells', c.pd$type)))))))
+c.pd$type = factor(c.pd$type, c( 'Lymphocytes', 'Monocytes','Neutrophils') )
+# 
+c.pd.aux <- rbindlist(main) %>% filter(type %in% c.types)
+c.pd.aux$type = gsub('lymphocytes', 'Lymphocytes', gsub('GSE60424.', '', gsub('CD4', 'CD4 T-Cells', gsub('CD8', 'CD8 T-Cells', gsub('monocytes', 'Monocytes',
+            gsub('neutrophils', 'Neutrophils', gsub('NK', 'NK Cells', c.pd.aux$type)))))))
+c.pd.aux$type = factor(c.pd.aux$type, c( 'Lymphocytes', 'Monocytes','Neutrophils') )
+# 
+c.pd.v <-  runs %>% filter(cohort == 'brain_validation_gbm') %>% filter(type %in% c.types)
+c.pd.v$type = gsub('lymphocytes', 'Lymphocytes', gsub('GSE60424.', '', gsub('CD4', 'CD4 T-Cells', gsub('CD8', 'CD8 T-Cells', gsub('monocytes', 'Monocytes',
+            gsub('neutrophils', 'Neutrophils', gsub('NK', 'NK Cells', c.pd.v$type)))))))
+c.pd.v$type = factor(c.pd.v$type, c( 'Lymphocytes', 'Monocytes','Neutrophils') )
+
+d.pd <- r %>% filter(type %in% d.types)
+d.pd$type = factor(d.pd$type, levels = d.types)
+
+d.pd.aux <- rbindlist(main) %>% filter(type %in% d.types)
+d.pd.aux$type = factor(d.pd.aux$type, levels = d.types)
+
+d.pd.v <-  runs %>% filter(cohort == 'brain_validation_gbm') %>% filter(type %in% d.types)
+d.pd.v$type = factor(d.pd.v$type, levels = d.types)
+```
+
+```{r FigureS6, fig.width = 10, fig.height = 14, dev = c('png','pdf'), warning = FALSE, message = FALSE}
+p3.b.list = lapply(b.pd %>% pull(type) %>% unique() %>% sort() %>% as.character(),
+                   function(x) { 
+                     ggplot(b.pd %>% filter(type == x) , aes(x = quantile)) +
+     geom_line(data = b.pd.aux %>% filter(type == x), aes(y = r, color = 'Discovery')) +
+      geom_line(data = b.pd.v %>% filter(type == x), aes(y = r, color = 'Validation')) +
+   geom_area(aes(y = `10%`), alpha =0.20) +
+    geom_area(aes(y = `90%`), alpha =0.20) +
+    theme_classic() +
+     geom_hline(yintercept = 0, linetype = 'dotted', size = 0.5, color = 'black') +
+     labs(y = 'Pearson R', x = '#TFBS Quantile', title = x) +
+     scale_y_continuous(limits = c(-0.6, 0.6)) + 
+        scale_color_manual(values= c('#e41a1c', '#4daf4a'), name = '')   +             
+      theme(axis.text = element_text(color = 'black', size = 12),
+          strip.background = element_rect(color = 'white'), 
+          plot.title = element_text(face = 'bold', size = 12, hjust = 0.5),
+          legend.position = c(0.25, 0.30),  legend.background =  element_blank())})
+names(p3.b.list) = b.pd %>% pull(type) %>% unique() %>% sort() %>% as.character()
+
+
+
+p3.c.list = lapply(c.pd %>% pull(type) %>% unique() %>% sort() %>% as.character(),
+                   function(x) {
+                     ggplot(c.pd %>% filter(type == x) , aes(x = quantile)) +
+     geom_line(data = c.pd.aux %>% filter(type == x), aes(y = r, color = 'Discovery')) +
+      geom_line(data = c.pd.v %>% filter(type == x), aes(y = r, color = 'Validation')) +
+   geom_area(aes(y = `10%`), alpha =0.20) +
+    geom_area(aes(y = `90%`), alpha =0.20) +
+    theme_classic() +
+     geom_hline(yintercept = 0, linetype = 'dotted', size = 0.5, color = 'black') +
+     labs(y = 'Pearson R', x = '#TFBS Quantile', title = x) +
+     scale_y_continuous(limits = c(-0.6, 0.6)) +
+     scale_x_continuous(labels = function(x) paste(x, '\n', sep = '')) +
+    scale_color_manual(values= c('#e41a1c', '#4daf4a'), name = '')   +
+      theme(axis.text = element_text(color = 'black', size = 12),
+          strip.background = element_rect(color = 'white'),
+          plot.title = element_text(face = 'bold', size = 12, hjust = 0.5),
+          legend.position = c(0.25, 0.30),  legend.background =  element_blank())})
+names(p3.c.list) =  c.pd %>% pull(type) %>% unique() %>% sort() %>% as.character()
+
+   
+
+p3.d.list = lapply(d.pd %>% pull(type) %>% unique() %>% sort() %>% as.character(),
+                   function(x) { 
+                     ggplot(d.pd %>% filter(type == x) , aes(x = quantile)) +
+     geom_line(data = d.pd.aux %>% filter(type == x), aes(y = r, color = 'Discovery')) +
+      geom_line(data = d.pd.v %>% filter(type == x), aes(y = r, color = 'Validation')) +
+   geom_area(aes(y = `10%`), alpha =0.20) +
+    geom_area(aes(y = `90%`), alpha =0.20) +
+    theme_classic() +
+     geom_hline(yintercept = 0, linetype = 'dotted', size = 0.5, color = 'black') +
+     labs(y = 'Pearson R', x = '#TFBS Quantile', title = x) +
+     scale_y_continuous(limits = c(-0.6, 0.6)) + 
+    scale_color_manual(values= c('#e41a1c', '#4daf4a'), name = '')   +             
+      theme(axis.text = element_text(color = 'black', size = 12),
+          strip.background = element_rect(color = 'white'), 
+          plot.title = element_text(face = 'bold', size = 12, hjust = 0.5),
+          legend.position = c(0.25, 0.30),  legend.background =  element_blank())})
+names(p3.d.list) =  d.pd %>% pull(type) %>% unique() %>% sort() %>% as.character()
+  
+
+p3.b.list[[1]] = p3.b.list[[1]] + labs(title = paste0("Brain Tissue\n", names(p3.b.list)[1]))
+p3.c.list[[1]] = p3.c.list[[1]] + labs(title = paste0("Immune Cells\n", names(p3.c.list)[1]))
+
+p3.d.list[[1]] = p3.d.list[[1]] + labs(title = paste0("Other Tumors\n", names(p3.d.list)[1]))
+p3.d.list[[2]] = p3.d.list[[2]] + labs(title = paste0("\n", names(p3.d.list)[2]))
+
+
+c4 = plot_grid(plotlist = p3.b.list, ncol = 1)
+
+
+c5 = plot_grid(plotlist = p3.c.list, ncol = 2)
+c6 = plot_grid(plotlist = p3.d.list, ncol = 2)
+
+c56 = plot_grid(c5, c6, ncol = 1, rel_heights = c(1,4), labels = c('b', 'c'))
+
+  
+panel = plot_grid(c4, c56, ncol = 2, labels = c('a', ''), rel_widths = c(1, 2) )
+
+plot(panel)
+```

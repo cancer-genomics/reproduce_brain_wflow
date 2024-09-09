@@ -1,0 +1,246 @@
+---
+title: "Figure 4. Origins of cfDNA Fragmentation in High Grade Gliomas Based on DECIFER Analyses"
+site: workflowr::wflow_site
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  workflowr::wflow_html:
+    code_folding: hide
+    toc: true
+editor_options:
+  chunk_output_type: console
+---
+
+```{r caching, echo=FALSE}
+knitr::opts_chunk$set(autodep = TRUE)
+```
+
+```{r packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(RColorBrewer)
+library(ggsci)
+library(data.table)
+library(pbapply)
+library(scales)
+library(cowplot)
+library(here)
+```
+
+```{r load.data}
+
+pd = readRDS(here('output', '04-decifer', 'null-brain', 'brain_with_null_plotdata_stats.rds'))
+main = pd$obs
+r = pd$r
+rho = pd$rho
+
+runs = readRDS(here('output', '04-decifer', 'main', 'cohort_rel_cov_tpm_merged_cor_complete.rds'))
+
+types <- sort(unique(as.character(r$type)))
+r$type = factor(r$type, levels = types)
+rho$type = factor(rho$type, levels = types)
+```
+
+```{r tfbs.brain_tcga, warning = FALSE, message = FALSE}
+
+p1.pd = runs %>% 
+        filter(cohort == 'brain') %>% 
+        filter(type %in% c('GBM',  'LGG', 'AML', 'BRCA', 'BLCA', 'COAD', 'KIRC', 'LIHC','LUSC',  'LUAD',  'PRAD',  'STAD', 'OV'))
+
+p1.pd$type = factor(p1.pd$type, levels = c('GBM', 'LGG', 'AML', 'BLCA', 'BRCA', 'COAD', 'KIRC', 'LIHC', 'LUAD','LUSC',  'OV',  'PRAD',  'STAD'))
+
+
+p1.cols = c("#1F78B4",  "#A6CEE3", "#ef3b2c","#CAB2D6" ,"#FDBF6F", "#B2DF8A", "#FF7F00", "#FB9A99", '#a50f55', '#a50f15', "#6A3D9A", "#33A02C", "#999999")
+names(p1.cols)  = c('GBM', 'LGG', 'AML', 'BRCA', 'BLCA', 'COAD', 'KIRC', 'LIHC','LUSC',  'LUAD',  'PRAD',  'STAD', 'OV')
+
+p1 = ggplot(p1.pd, aes(x = quantile, y = r, color = type)) + 
+   geom_point(size = 0.25) + 
+   geom_line() + 
+   theme_classic() + 
+   scale_color_manual(values = p1.cols) + 
+   scale_x_continuous(labels = function(x) paste(x, '\n', sep = '')) + 
+   labs(x = '#TFBS Quantile', title = 'Correlation of TFBS relative coverage effect size with tumor gene expression', color = 'Tumor Type', y ='Pearson R') + 
+   theme(axis.text = element_text(color ='black', size = 11), legend.spacing.y = unit(0.15, 'cm'), legend.key.height = unit(0.15, 'cm')) + 
+   geom_hline(yintercept = 0, color = '#aaaaaa', linetype = 'dashed', size= 0.2)+ scale_y_continuous(limits = c(-0.65, 0.65)) + 
+  guides(color = guide_legend(byrow = TRUE))
+
+part.a = p1
+```
+
+```{r tfbs.brain_immune, warning = FALSE, message = FALSE}
+
+#---------------------------------------#
+# figure 2: brain, aml, immune cell types
+
+p2.pd = runs %>% 
+        filter(cohort == 'brain') %>% 
+        filter(type %in% c( 'GBM', 'Adult tumor core:Astrocyte', 'GSE60424.neutrophils', 'GSE60424.CD8', 'GSE60424.CD4', 'GSE60424.monocytes', 'LUAD', 'LIHC'))
+
+p2.pd$type = gsub('Adult tumor core:Astrocyte', 'Tumor Core\nAstrocytes', 
+           gsub('GSE60424.', '',
+           gsub('neutrophils', 'Neutrophils', 
+           gsub('monocytes', 'Monocytes', 
+           gsub('CD4', 'CD4 T-Cells', 
+           gsub('CD8', 'CD8 T-Cells', p2.pd$type))))))
+
+p2.cols = c("#1F78B4", "#034d80","#33A02C", "#B2DF8A", "#DF65B0", "#6A3D9A", "#FDBF6F", "#FFED6F")
+names(p2.cols) <- c( 'GBM', 'Tumor Core\nAstrocytes', "Neutrophils" , "Monocytes",  "CD4 T-Cells", "CD8 T-Cells", "LIHC", "LUAD")
+
+p2.pd$type  = factor(p2.pd$type, levels = c('GBM', 'Tumor Core\nAstrocytes', 'AML',  "CD4 T-Cells", "CD8 T-Cells","Monocytes", "Neutrophils" ,  "LIHC", "LUAD"))
+
+# Correlation of differences in cfDNA coverage in individuals\nwith/without brain cancer with expression differences between\ncell types or tumor tissue and blood
+p2.cols = p2.cols[levels(p2.pd$type)]
+p2 = ggplot(p2.pd, aes(x = quantile, y = r, color = type)) + 
+   geom_point(size = 0.5) + 
+   geom_line() + 
+   theme_classic() + 
+   scale_color_manual(values = p2.cols, name = 'Tumor/Cell Type') + 
+   scale_x_continuous(labels = function(x) paste(x, '\n', sep = '')) + 
+   labs(x = '#TFBS Quantile', y = "Pearson R", title = 'Correlation of TFBS relative coverage\neffect size with tumor or immune\ncell gene expression') + 
+   theme(axis.text = element_text(color ='black', size = 11), legend.spacing.y = unit(0.25, 'cm'), legend.key.height = unit(0.25, 'cm')) + 
+   geom_hline(yintercept = 0, color = '#aaaaaa', linetype = 'dashed', size= 0.2) +
+  scale_y_continuous(limits= c(-0.6, 0.6))
+part.b = p2
+```
+
+```{r tfbs.brain_null, warning = FALSE, message = FALSE}
+
+a.types = c('GBM', 'Adult tumor core:Astrocyte', 'lymphocytes')
+
+b.types = c('Adult temporal lobe:Astrocyte', 'Adult temporal lobe:Endothelial', 'Adult temporal lobe:Myeloid',
+            'Adult temporal lobe:Oligodendrocyte', 'Adult temporal lobe:Whole cortex')
+
+c.types = c("GSE60424.monocytes", "GSE60424.neutrophils")
+
+d.types = c('BRCA', 'BLCA', 'COAD', 'KIRC', 'LIHC','LUSC',  'LUAD',  'PRAD')
+
+
+a.pd <- r %>% filter(type %in% a.types)
+a.pd$type = gsub('Adult tumor core:Astrocyte', 'Tumor Core Astrocyte', a.pd$type)
+a.pd$type = gsub('lymphocytes', 'Lymphocytes', a.pd$type)
+
+a.pd$type = factor(a.pd$type, c('GBM', 'Tumor Core Astrocyte', 'Lymphocytes'))
+
+a.pd.aux = runs %>% filter(cohort == 'brain') %>% filter(type %in% a.types)
+a.pd.aux$type = gsub('Adult tumor core:Astrocyte', 'Tumor Core Astrocyte', a.pd.aux$type)
+a.pd.aux$type = gsub('lymphocytes', 'Lymphocytes', a.pd.aux$type)
+a.pd.aux$type = factor(a.pd.aux$type, c('GBM', 'Tumor Core Astrocyte', 'Lymphocytes'))
+
+a.pd.v = runs %>% filter(cohort == 'brain_validation_gbm') %>% filter(type %in% a.types)
+a.pd.v$type = gsub('Adult tumor core:Astrocyte', 'Tumor Core Astrocyte', a.pd.v$type)
+a.pd.v$type = gsub('lymphocytes', 'Lymphocytes', a.pd.v$type)
+a.pd.v$type = factor(a.pd.v$type, c('GBM', 'Tumor Core Astrocyte', 'Lymphocytes'))
+
+
+p3.a.list = lapply(a.pd %>% pull(type) %>% unique() %>% sort() %>% as.character(),
+                   function(x) { 
+                     ggplot(a.pd %>% filter(type == x) , aes(x = quantile)) +
+     geom_line(data = a.pd.aux %>% filter(type == x), aes(y = r, color = 'Discovery')) +
+      geom_line(data = a.pd.v %>% filter(type == x), aes(y = r, color = 'Validation')) +
+   geom_area(aes(y = `10%`), alpha =0.20) +
+    geom_area(aes(y = `90%`), alpha =0.20) +
+    theme_classic() +
+     geom_hline(yintercept = 0, linetype = 'dotted', size = 0.5, color = 'black') +
+     labs(y = 'Pearson R', x = '#TFBS Quantile', title = x) +
+     scale_y_continuous(limits = c(-0.6, 0.6)) + 
+     scale_x_continuous(labels = function(x) paste(x, '\n', sep = '')) + 
+        scale_color_manual(values= c('#e41a1c', '#4daf4a'), name = '')   +             
+      theme(axis.text = element_text(color = 'black', size = 12),
+          strip.background = element_rect(color = 'white'), 
+          plot.title = element_text(face = 'bold', size = 12, hjust = 0.5),
+          legend.position = c(0.25, 0.30),  legend.background =  element_blank())})
+
+names(p3.a.list) = a.pd %>% pull(type) %>% unique() %>% sort() %>% as.character()
+```
+
+```{r tfbs.liver_tcga, warning = FALSE, message = FALSE}
+# figure 4: liver cohort data
+lihc = subset(runs, cohort == 'liver')
+p4.pd = lihc %>% 
+        filter(cohort == 'liver') %>% 
+        filter(type %in% c('LIHC', 'COAD', 'GBM', 'LGG', 'LUAD'))
+
+# Correlation of differences in cfDNA coverage in individuals\nwith/without liver cancer with expression differences between\ntumor tissue and blood
+
+p4.pd$type = factor(p4.pd$type, levels = rev(c('LIHC', 'LUAD',  'COAD',  'LGG', 'GBM')))
+p4.cols = p1.cols     
+p4 = ggplot(p4.pd, aes(x = quantile, y = r, color = type)) + 
+   geom_point(size = 0.5) + 
+   geom_line() + 
+   theme_classic() + 
+   scale_color_manual(values = p4.cols, name = 'Tumor Type') + 
+   scale_x_continuous(labels = function(x) paste(x, '\n', sep = '')) + 
+   labs(x = '#TFBS Quantile', y = "Pearson R", title = 'Correlation of TFBS relative coverage\neffect size with tumor gene expression\n(Liver cancer)') + 
+   theme(axis.text = element_text(color ='black', size = 11), legend.spacing.y = unit(0.25, 'cm'), legend.key.height = unit(0.25, 'cm')) + 
+   geom_hline(yintercept = 0, color = '#aaaaaa', linetype = 'dashed', size= 0.2)+  
+  scale_y_continuous(limits = c(-0.6, 0.6))
+
+part.d = p4
+```
+
+```{r all.samples.cbc, warning = FALSE, message = FALSE}
+load(here('output', '01-rbrain', 'metadata.rda'))
+load(here('output', '01-rbrain', 'cbc.rda'))
+
+cbc$cat = gsub('Grade ', '', cbc$pathology)
+
+cbc = cbc %>% 
+      pivot_wider(id_cols = c('id', 'pathology', 'cat'), 
+                  names_from = 'immune.cells', values_from = 'fraction')
+
+cbc <- cbc %>% 
+      group_by(cat) %>% 
+      mutate(n = n()) %>% 
+      ungroup() %>% 
+      dplyr::relocate('n', .after = 'cat') %>% 
+      unite('label', cat:n, sep = '\nn=', remove = FALSE)
+
+cbc$cat = factor(cbc$cat, levels = c('NNNC', 'I/II', 'III', 'IV'))
+cbc = cbc %>% arrange(cat)
+cbc$label = factor(cbc$label, levels = unique(cbc$label))
+
+#--------------------------------------------------------------------------------#
+pd <- cbc %>% pivot_longer(cols = c('Neutrophils', 'Lymphocytes', 'Monocytes'))
+g1 = ggplot(pd %>% filter(name == 'Lymphocytes'), aes(x = label, y = value)) + 
+    geom_boxplot(width = 0.2, outlier.colour = NA, aes(fill = label), alpha = 0.3, size = 0.35) + 
+    geom_jitter(width = 0.10, color = '#7570b3', size= 0.75, alpha = 0.5) + 
+    theme_classic() + stat_compare_means(comparisons = list(c(1,4)), label = 'p.format') +
+    labs(x = '', y = 'Percentage of Cells', title = 'Lymphocytes') + 
+    scale_fill_brewer(palette = 'Reds') + 
+    theme(legend.position = 'none', 
+          strip.text = element_text(size= 13), 
+          axis.text = element_text(color = 'black', size = 12), 
+          axis.title.x = element_text(color = 'black'),
+          strip.background = element_blank(),
+          plot.title = element_text(face = 'bold', size = 12, hjust = 0.5))
+
+g2 = ggplot(pd %>% filter(name == 'Monocytes'), aes(x = label, y = value)) + 
+    geom_boxplot(width = 0.2, outlier.colour = NA, aes(fill = label), alpha = 0.3, size = 0.35) + 
+    geom_jitter(width = 0.10, color = '#7570b3', size= 0.75, alpha = 0.5) + 
+    theme_classic() + stat_compare_means(comparisons = list(c(1,4)), label = 'p.format') +
+    labs(x = '', y = 'Percentage of Cells', title = 'Monocytes') + 
+    scale_fill_brewer(palette = 'Reds') + 
+    theme(legend.position = 'none', strip.text = element_text(size= 13), axis.text = element_text(color = 'black', size = 12), axis.title.x = element_text(color = 'black'),
+          strip.background = element_rect(color = NA, fill = NA),plot.title = element_text(face = 'bold', size = 12, hjust = 0.5))
+
+g3 = ggplot(pd %>% filter(name == 'Neutrophils'), aes(x = label, y = value)) + 
+    geom_boxplot(width = 0.2, outlier.colour = NA, aes(fill = label), alpha = 0.3, size = 0.35) + 
+    geom_jitter(width = 0.10, color = '#7570b3', size= 0.75, alpha = 0.5) + 
+    theme_classic() + stat_compare_means(comparisons = list(c(1,4)), label = 'p.format') +
+    labs(x = '', y = 'Percentage of Cells', title = 'Neutrophils') + 
+    scale_fill_brewer(palette = 'Reds') + 
+    theme(legend.position = 'none', strip.text = element_text(size= 13), axis.text = element_text(color = 'black', size = 12), axis.title.x = element_text(color = 'black'),
+          strip.background = element_rect(color = NA, fill = NA),plot.title = element_text(face = 'bold', size = 12, hjust = 0.5))
+```
+
+```{r Figure4, fig.width = 12, fig.height = 12, dev = c('png','pdf'), warning = FALSE, message = FALSE}
+
+cbc.row = plot_grid(plotlist = list(g1, g2, g3), ncol = 3, labels = c('', '', ''))
+element.a = plot_grid(part.a, cbc.row, ncol = 1,rel_heights = c(1.35,1 ), labels = c('a', 'c'))
+element.b = plot_grid(part.b, part.d, ncol = 1, rel_heights = c(1,1), labels = c('b', 'd'))
+top.row = plot_grid(element.a, element.b, ncol = 2, rel_widths = c(4,2))
+bottom.row = plot_grid(plotlist = p3.a.list, ncol = 3,  labels = c('e'))
+fig4r = plot_grid(top.row, bottom.row,  ncol = 1, rel_heights = c(2,1))
+
+fig4r
+```

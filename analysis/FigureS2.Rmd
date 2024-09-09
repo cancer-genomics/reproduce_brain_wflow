@@ -1,0 +1,76 @@
+---
+title: "Supplementary Figure 2. Correlation of Brain Tumor Size with ARTEMIS-DELFI Scores"
+site: workflowr::wflow_site
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  workflowr::wflow_html:
+    code_folding: hide
+    toc: true
+editor_options:
+  chunk_output_type: console
+---
+
+```{r caching, echo=FALSE}
+knitr::opts_chunk$set(autodep = TRUE)
+```
+
+```{r packages, message=FALSE, warning=FALSE, echo = FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(RColorBrewer)
+library(ggfortify)
+library(ggh4x)
+library(ggpubr)
+library(latex2exp)
+library(data.table)
+library(reshape2)
+library(cowplot)
+library(pROC)
+library(here)
+```
+
+```{r load.data, echo = FALSE, message=FALSE, warning=FALSE}
+# [1] load input data
+
+load(here('output', '01-rbrain', 'metadata.rda'))
+load(here('output', '02-artemis-delfi', 'scores.rda'))
+
+training.ids = metadata %>% filter(training == TRUE) %>% pull(alternate_id)
+heldout.ids = metadata %>% filter(heldout == TRUE) %>% pull(alternate_id)
+validation.ids = metadata %>% filter(validation == TRUE) %>% pull(alternate_id)
+
+scores$training = scores$id %in% training.ids
+
+scores = merge(metadata, scores %>% select(id, artemis.delfi), by.x = 'alternate_id', by.y = 'id', all.x = TRUE)
+
+```
+
+```{r FigureS2, echo = FALSE, message=FALSE, warning=FALSE}
+
+
+tb.pd = scores %>% filter(! is.na(volume))
+
+p.size.all = ggplot(tb.pd, aes(x = volume, y = artemis.delfi)) + 
+             geom_point() + 
+             theme_pubr() + 
+             labs(x = TeX(sprintf(r'($Volume (cm^3)$)')) ,  y = 'ARTEMIS-DELFI Score', 
+                  title = 'All Brain Tumors' ) + 
+             stat_cor(label.x = 80, label.y = 0.5, color = 'navy' ) + 
+            theme(plot.margin = margin(t = 0, b = 1.05, l = 0, r = 0, "cm"),
+                  plot.title = element_text(hjust = 0.5))
+
+hg.labels = c('Grade III', 'Grade IV', 'Rec Grade IV')
+p.size.hg = ggplot(tb.pd %>% filter(pathology._simplified %in% hg.labels), 
+                   aes(x = volume, y = artemis.delfi)) + 
+             geom_point() + 
+             theme_pubr() + 
+             labs(x = TeX(sprintf(r'($Volume (cm^3)$)')) ,  y = 'ARTEMIS-DELFI Score', 
+                  title = 'High Grade Gliomas' ) + 
+             stat_cor(label.x = 80, label.y = 0.5, color = 'navy')+ 
+            theme(plot.margin = margin(t = 0, b = 1.05, l = 0, r = 0, "cm"),
+                  plot.title = element_text(hjust = 0.5))
+
+panel = cowplot::plot_grid(p.size.all, p.size.hg, labels = c('a', 'b'), ncol = 2)
+
+plot(panel)
+```

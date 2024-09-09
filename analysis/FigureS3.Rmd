@@ -1,0 +1,99 @@
+---
+title: "Supplementary Figure 3. Fragment length cumulative distributions of cfDNA in brain tumor patients by mutation type"
+site: workflowr::wflow_site
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  workflowr::wflow_html:
+    code_folding: hide
+    toc: true
+editor_options:
+  chunk_output_type: console
+---
+
+```{r caching, echo=FALSE}
+knitr::opts_chunk$set(autodep = TRUE)
+```
+
+```{r packages, message=FALSE, warning = FALSE, message = FALSE }
+library(tidyverse)
+library(ggplot2)
+library(ggfortify)
+library(RColorBrewer)
+library(ggpubr)
+library(ggforce)
+library(reshape2)
+library(data.table)
+library(pROC)
+library(cowplot)
+library(here)
+```
+
+
+```{r FigureS3, warning = FALSE, message = FALSE, dev = c('png', 'pdf'), fig.width = 12, fig.height = 12}
+s = readRDS(here('data', '03-targeted-sequencing', 'fragment_lengths.rds'))
+
+
+TS.list = list(CGCNS67P_2 = c("ACVR1B:T206I", "CD79B:R114Q", "CSF1R:R378H" , "SETD2:R1826C", "ERBB3:n/a", "FGF10:N147D", "PIK3C2B:K1415*","TP53:R248W"),
+               CGCNS118P_2 = c("EGFR:A289V"),
+               CGCNS133P_2 = 'EGFR:R108K')
+
+GL.list = list(CGCNS36P_2 = 'BRCA1:M1361L', 
+               CGCNS23P_2 = 'BRCA2:S976I')
+
+CHIP.list = list(CGCNS72P_2 = 'TET2:n/a', 
+                CGCNS124P_2 = 'TET2:C1642*',
+                CGCNS42P_2 = 'DNMT3B:L489F', 
+                CGCNS74P_2 = c('TET2:R1214G', 'TET2:Q1445*'),
+                CGCNS124P_2 = 'TET2:C1642*', 
+                CGCNS29P_2 = 'RUNX1:D30N')
+
+pdx = data.frame()
+
+for (sample.id in names(TS.list)){
+  for (var.id in TS.list[[sample.id]]){
+    pdx = rbind(pdx, data.frame(id = sample.id, mut = var.id, origin = 'Tumor-Specific', allele = 'WT', L = s[[sample.id]][[var.id]][['wt']]))
+    pdx = rbind(pdx, data.frame(id = sample.id, mut = var.id, origin = 'Tumor-Specific', allele = 'MUT', L = s[[sample.id]][[var.id]][['mut']]))
+  } 
+}
+  
+for (sample.id in names(GL.list)){
+  for (var.id in GL.list[[sample.id]]){
+    pdx = rbind(pdx, data.frame(id = sample.id, mut = var.id, origin = 'Germline', allele = 'WT', L = s[[sample.id]][[var.id]][['wt']]))
+    pdx = rbind(pdx, data.frame(id = sample.id, mut = var.id, origin = 'Germline', allele = 'MUT', L = s[[sample.id]][[var.id]][['mut']]))
+  } 
+}  
+  
+for (sample.id in names(CHIP.list)){
+  for (var.id in CHIP.list[[sample.id]]){
+    pdx = rbind(pdx, data.frame(id = sample.id, mut = var.id, origin = 'CHIP', allele = 'WT', L = s[[sample.id]][[var.id]][['wt']]))
+    pdx = rbind(pdx, data.frame(id = sample.id, mut = var.id, origin = 'CHIP', allele = 'MUT', L = s[[sample.id]][[var.id]][['mut']]))
+  } 
+}   
+
+pdx = pdx %>% filter(L > 50 & L < 250)
+
+pdx$origin = factor(pdx$origin, levels = c('Tumor-Specific', 'CHIP', 'Germline'))
+pdx$mut = as.character(pdx$mut)
+
+pdx = pdx %>% 
+      unite('key', c('origin', 'allele'), remove = FALSE) %>%
+      unite('var', c('id', 'mut'), sep = '|', remove = FALSE) %>% 
+      arrange(origin, mut) 
+
+pdx$var = factor(pdx$var, levels = unique(pdx$var))
+pdx$key = factor(pdx$key, levels = unique(pdx$key))
+
+cols = c("#FB9A99", "#E31A1C", "#B2DF8A", "#33A02C", "#A6CEE3", "#1F78B4")
+names(cols) = levels(pdx$key)
+
+g = ggplot(pdx , aes(x = L, color = key)) + 
+    stat_ecdf(size = 0.65) + 
+    coord_cartesian(xlim = c(50,250)) + 
+    theme_pubr() + 
+    facet_wrap(~var, ncol = 5 ) + 
+    scale_color_manual(values = cols, name = '')+ 
+    theme(legend.position = 'bottom') + 
+    labs(x = 'Fragment Length', y = 'Cumulative Frac. of cfDNA Fragments')
+
+plot(g)
+```

@@ -1,0 +1,150 @@
+---
+title: "R Session Info"
+site: workflowr::wflow_site
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  workflowr::wflow_html:
+    code_folding: hide
+    toc: true
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+```{r packages, message=FALSE, warning=FALSE}
+#2
+library(tidyverse)
+library(ggplot2)
+library(RColorBrewer)
+library(ggfortify)
+library(ggh4x)
+library(ggpubr)
+library(latex2exp)
+library(data.table)
+library(reshape2)
+library(cowplot)
+library(pROC)
+library(here)
+
+#3
+library(tidyverse)
+library(ggplot2)
+library(ggfortify)
+library(RColorBrewer)
+library(ggpubr)
+library(ggforce)
+library(reshape2)
+library(data.table)
+library(pROC)
+library(cowplot)
+library(here)
+
+
+#4
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(RColorBrewer)
+library(ggsci)
+library(data.table)
+library(pbapply)
+library(scales)
+library(cowplot)
+library(here)
+
+#extended 1
+
+#extended 2
+library(tidyverse)
+library(ggplot2)
+library(RColorBrewer)
+library(ggfortify)
+library(ggh4x)
+library(ggpubr)
+library(latex2exp)
+library(data.table)
+library(reshape2)
+library(cowplot)
+library(pROC)
+library(here)
+
+#extended 3
+library(tidyverse)
+library(ggplot2)
+library(ggfortify)
+library(RColorBrewer)
+library(ggpubr)
+library(ggforce)
+library(reshape2)
+library(data.table)
+library(pROC)
+library(cowplot)
+library(here)
+
+#extended 4
+library(tidyverse)
+library(pbapply)
+library(ComplexHeatmap)
+library(RColorBrewer)
+library(circlize)
+library(scales)
+library(getopt)
+library(here)
+
+#extended 5
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(RColorBrewer)
+library(ggsci)
+library(data.table)
+library(pbapply)
+library(scales)
+library(cowplot)
+library(here)
+
+# artemis-delfi
+library(plyr)
+library(dplyr)
+library(tidyverse)
+library(caret)
+library(recipes)
+library(devtools)
+library(data.table)
+library(pROC)
+library(gbm)
+
+
+# decifer
+library(tidyverse)
+library(data.table)
+library(pbapply)
+library(effsize)
+library(ComplexHeatmap)
+library(RColorBrewer)
+library(circlize)
+library(scales)
+library(getopt)
+
+
+#Delfi Pipeline
+suppressMessages(library(GenomicAlignments))
+suppressMessages(library(GenomicRanges))
+suppressMessages(library(Rsamtools))
+suppressMessages(library(devtools))
+suppressMessages(library(Biostrings))
+suppressMessages(library(data.table))
+suppressMessages(library(getopt))
+suppressMessages(library(devtools))
+
+```
+
+```{r info}
+sessionInfo()
+```
+
