@@ -1,0 +1,10 @@
+model	features	scaled_coefs
+joint	Artemis_Score	1.45
+joint	Cov_GBM	0.28
+joint	zscores_ssl	0.2
+artemis	Epi_ssl	1.49
+artemis	LINE_ssl	0.31
+artemis	LTR_ssl	0.68
+artemis	RNA_TE_ssl	-0.36
+artemis	Sat_ssl	0.49
+artemis	SINE_ssl	0.46
