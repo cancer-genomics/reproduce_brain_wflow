@@ -1,5 +1,5 @@
 ---
-title: "Supplementary Figure 2. Correlation of Brain Tumor Size with ARTEMIS-DELFI Scores"
+title: "Supplementary Figure S2. Feature importance of the ARTEMIS-DELFI classifier by feature family"
 site: workflowr::wflow_site
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -16,61 +16,133 @@ knitr::opts_chunk$set(autodep = TRUE)
 
 ```{r packages, message=FALSE, warning=FALSE, echo = FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
-library(ggplot2)
-library(RColorBrewer)
-library(ggfortify)
-library(ggh4x)
-library(ggpubr)
-library(latex2exp)
 library(data.table)
-library(reshape2)
-library(cowplot)
+library(caret)
+library(recipes)
 library(pROC)
+library(gbm)
 library(here)
+library(future)
+library(doFuture)
+library(foreach)
+library(grid)
+library(gridExtra)
+library(here)
+library(ggbeeswarm)
 ```
 
 ```{r load.data, echo = FALSE, message=FALSE, warning=FALSE}
-# [1] load input data
+models = list()
 
-load(here('output', '01-rbrain', 'metadata.rda'))
-load(here('output', '02-artemis-delfi', 'scores.rda'))
+#These are the models we actually want
+models[["ARTEMIS_Ensemble"]] <-readRDS("../output/02-artemis-delfi/ARTEMIS_Ensemble.rds")
+models[["ARTEMIS_single_DELFI_SSLs_Ensemble"]] <-readRDS("../output/02-artemis-delfi/ARTEMIS_single_DELFI_SSLs_Ensemble.rds")
 
-training.ids = metadata %>% filter(training == TRUE) %>% pull(alternate_id)
-heldout.ids = metadata %>% filter(heldout == TRUE) %>% pull(alternate_id)
-validation.ids = metadata %>% filter(validation == TRUE) %>% pull(alternate_id)
+# SSL elements generated:
+models[['Cov_GBM']] <-readRDS("../output/02-artemis-delfi/Cov_GBM.rds")
+models[['zscores_ssl']] <-readRDS("../output/02-artemis-delfi/zscores_ssl.rds")
+models[['Ratios_ssl']] <-readRDS("../output/02-artemis-delfi/Ratios_ssl.rds")
 
-scores$training = scores$id %in% training.ids
 
-scores = merge(metadata, scores %>% select(id, artemis.delfi), by.x = 'alternate_id', by.y = 'id', all.x = TRUE)
+models[['Epi_ssl']] <-readRDS("../output/02-artemis-delfi/Epi_ssl.rds")
+models[['LINE_ssl']] <-readRDS("../output/02-artemis-delfi/LINE_ssl.rds")
+models[['LTR_ssl']] <-readRDS("../output/02-artemis-delfi/LTR_ssl.rds")
+models[['SINE_ssl']] <-readRDS("../output/02-artemis-delfi/SINE_ssl.rds")
+models[['Sat_ssl']] <-readRDS("../output/02-artemis-delfi/Sat_ssl.rds")
+models[['RNA_TE_ssl']] <-readRDS("../output/02-artemis-delfi/RNA_TE_ssl.rds")
+
+
+#==============================================#
+brain_data = data.table::fread('../data/02-artemis-delfi/Brain_Train.csv')
+#==============================================#
+
+base.models = c('zscores_ssl', 'Epi_ssl', 'LINE_ssl', 'SINE_ssl',
+	            'LTR_ssl', 'Sat_ssl', 'RNA_TE_ssl')
+
+#==============================================#
+# loading in metadata
+load('../output/01-rbrain/metadata.rda')
+brain_meta = metadata
+
+brain_training_ids = brain_meta %>% filter(training == TRUE) %>% pull(alternate_id)
 
 ```
 
-```{r FigureS2, echo = FALSE, message=FALSE, warning=FALSE}
+```{r FigureS2, echo = TRUE, message=FALSE, warning=FALSE, fig.height = 18, fig.width = 18, dev = c('png','pdf')}
 
+get_scaled_coefs = function(model){
+	orig_coefs <- (coef(model$finalModel, s = model$bestTune$lambda) * (-1)) %>% 
+              as.matrix() %>% 
+              data.frame() %>%
+              rownames_to_column('variable')
 
-tb.pd = scores %>% filter(! is.na(volume))
+    orig_coefs <- coef(model$finalModel, s = model$bestTune$lambda) * (-1)
+    pr <- prep(model$recipe)
+    model_input <- suppressWarnings(bake(pr, new_data = model$trainingData))
 
-p.size.all = ggplot(tb.pd, aes(x = volume, y = artemis.delfi)) + 
-             geom_point() + 
-             theme_pubr() + 
-             labs(x = TeX(sprintf(r'($Volume (cm^3)$)')) ,  y = 'ARTEMIS-DELFI Score', 
-                  title = 'All Brain Tumors' ) + 
-             stat_cor(label.x = 80, label.y = 0.5, color = 'navy' ) + 
-            theme(plot.margin = margin(t = 0, b = 1.05, l = 0, r = 0, "cm"),
-                  plot.title = element_text(hjust = 0.5))
+    feature_means <- model_input  %>%
+      select(-c(id, type)) %>%
+      colMeans()
+    feature_sds <- model_input %>%
+      select(-c(id, type)) %>%
+      as.data.frame() %>%
+      summarise_all(sd)
+    feature_coefs <- data.frame(features = names(feature_sds),
+                            sd = as.numeric(feature_sds))
+    feature_coefs <- merge(feature_coefs,
+                     data.frame(features = rownames(orig_coefs),
+                                orig_coefs = as.numeric(orig_coefs)),
+                     by = 'features', all.x = TRUE)
+    feature_coefs$scaled_coefs <- feature_coefs$orig_coefs * feature_coefs$sd
+	feature_coefs$sign = factor(ifelse(feature_coefs$scaled_coefs >= 0, '+', '-'),
+		                        levels = c('-', '+'))
+ 	return(feature_coefs) 
+}
 
-hg.labels = c('Grade III', 'Grade IV', 'Rec Grade IV')
-p.size.hg = ggplot(tb.pd %>% filter(pathology._simplified %in% hg.labels), 
-                   aes(x = volume, y = artemis.delfi)) + 
-             geom_point() + 
-             theme_pubr() + 
-             labs(x = TeX(sprintf(r'($Volume (cm^3)$)')) ,  y = 'ARTEMIS-DELFI Score', 
-                  title = 'High Grade Gliomas' ) + 
-             stat_cor(label.x = 80, label.y = 0.5, color = 'navy')+ 
-            theme(plot.margin = margin(t = 0, b = 1.05, l = 0, r = 0, "cm"),
-                  plot.title = element_text(hjust = 0.5))
+make_lollipop_data <- function(model, model_name = ''){
+  
+	feature_coefs = get_scaled_coefs(model)
+	min_incl = max(abs(feature_coefs$scaled_coefs)) * 0.05
+		
+	pd = feature_coefs %>% 
+       select(features, scaled_coefs, sign) %>% 
+	     filter(abs(scaled_coefs) >= min_incl) %>% 
+	     arrange(-abs(scaled_coefs)) %>% 
+       mutate(variable = features, coef = scaled_coefs) %>% 
+	     mutate(variable = gsub('_GM12878', '',variable)) %>% 
+       mutate(variable = factor(variable, levels = unique(variable))) %>% 
+	     select(variable, coef, sign)
+	
+	return(pd)
+}
 
-panel = cowplot::plot_grid(p.size.all, p.size.hg, labels = c('a', 'b'), ncol = 2)
+data = list()
 
-plot(panel)
+data[['Chromosome Arms']] = make_lollipop_data(models$zscores_ssl)
+data[['Epigenetic Bins']] = make_lollipop_data(models$Epi_ssl)
+
+data[['LTR']] = make_lollipop_data(models$LTR_ssl)
+data[['Satellite']] = make_lollipop_data(models$Sat_ssl)
+data[['SINE']] = make_lollipop_data(models$SINE_ssl)
+data[['LINE']] = make_lollipop_data(models$LINE_ssl)
+data[['RNA/LTR']] = make_lollipop_data(models$RNA_TE_ssl)
+
+pd = rbindlist(data, idcol = 'Family')
+pd$Family = factor(pd$Family, levels = names(data))
+
+g = ggplot(pd , aes(x = variable, y = coef, color = sign)) + 
+        geom_point() + 
+        geom_segment(aes( xend = variable, yend = 0)) + 
+        theme_classic() + 
+        labs(y = 'Scaled Coefficient', x = '') + 
+        theme(legend.position = 'none') + 
+        scale_color_manual(values = c( '#33a02c', '#6a3d9a')) + 
+        scale_x_discrete(labels =  function(x) gsub('zscore_', '', x))  + 
+    facet_wrap(~Family, scales = 'free')  + 
+      theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+  
+  
+print(g)
+  
 ```
+
