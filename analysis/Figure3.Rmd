@@ -189,13 +189,13 @@ threshold_trace_univariate =pt
 ```
 
 
-```{r Figure5, fig.width = 10, fig.height = 9, dev = c('png', 'pdf'), echo = FALSE}
+```{r Figure3, fig.width = 10, fig.height = 9, dev = c('png', 'pdf'), echo = FALSE}
 
 plot_grid(threshold_trace_univariate, plot_grid(plot_grid(g.os_zscore_0.75$plot,
                                                g.os_zscore_0.75$table, ncol = 1, rel_heights = c(3, 1)),
                                     plot_grid(g.os_epi_0.75$plot,
                                                g.os_epi_0.75$table, ncol = 1, rel_heights = c(3, 1)),
-                                    ncol = 2, labels = c('b', 'c')), ncol =1, labels = c('a', ''), rel_heights = c(0.75, 1.25))
+                                    ncol = 2, labels = c('B', 'C')), ncol =1, labels = c('A', ''), rel_heights = c(0.75, 1.25))
 ```
 
 

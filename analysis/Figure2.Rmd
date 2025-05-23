@@ -756,8 +756,8 @@ part.b = part.b + theme(plot.margin = margin(t = 0, b = 1.39, l = 0, r = 0, "cm"
 
 set.seed(1)
 panel = part.a + 
-        (part.b1 + part.b2.i_ii/part.b4.iv + part.b3.iii / part.b5.rec_iv + part.c  + part.d.spec + part.d.sens +plot_layout(ncol = 6, widths = c(0.85, 0.45, 0.45, 0.85, 0.25, 0.25)) + plot_annotation(tag_level = 'a')) + 
-        plot_layout(nrow = 2) + plot_annotation(tag_level = c('a'))
+        (part.b1 + part.b2.i_ii/part.b4.iv + part.b3.iii / part.b5.rec_iv + part.c  + part.d.spec + part.d.sens +plot_layout(ncol = 6, widths = c(0.85, 0.45, 0.45, 0.85, 0.25, 0.25)) + plot_annotation(tag_level = 'A')) + 
+        plot_layout(nrow = 2) + plot_annotation(tag_level = c('A'))
 plot(panel)
 
 ```
