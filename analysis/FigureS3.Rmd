@@ -1,5 +1,5 @@
 ---
-title: "Supplementary Figure 3. Fragment length cumulative distributions of cfDNA in brain tumor patients by mutation type"
+title: "Supplementary Figure S3. ARTEMIS-DELFI score distribution across genomic library batch preparation"
 site: workflowr::wflow_site
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -14,86 +14,266 @@ editor_options:
 knitr::opts_chunk$set(autodep = TRUE)
 ```
 
-```{r packages, message=FALSE, warning = FALSE, message = FALSE }
+```{r packages, message=FALSE, warning=FALSE, echo = FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(ggplot2)
-library(ggfortify)
 library(RColorBrewer)
+library(ggfortify)
+library(ggh4x)
 library(ggpubr)
-library(ggforce)
-library(reshape2)
+library(latex2exp)
 library(data.table)
-library(pROC)
+library(reshape2)
 library(cowplot)
+library(pROC)
 library(here)
 ```
 
+```{r load.data, echo = FALSE, message=FALSE, warning=FALSE}
+# [1] load input data
 
-```{r FigureS3, warning = FALSE, message = FALSE, dev = c('png', 'pdf'), fig.width = 12, fig.height = 12}
-s = readRDS(here('data', '03-targeted-sequencing', 'fragment_lengths.rds'))
+load(here('output', '01-rbrain', 'metadata.rda'))
+load(here('output', '02-artemis-delfi', 'scores.rda'))
+
+training.ids = metadata %>% filter(training == TRUE) %>% pull(alternate_id)
+heldout.ids = metadata %>% filter(heldout == TRUE) %>% pull(alternate_id)
+validation.ids = metadata %>% filter(validation == TRUE) %>% pull(alternate_id)
 
 
-TS.list = list(CGCNS67P_2 = c("ACVR1B:T206I", "CD79B:R114Q", "CSF1R:R378H" , "SETD2:R1826C", "ERBB3:n/a", "FGF10:N147D", "PIK3C2B:K1415*","TP53:R248W"),
-               CGCNS118P_2 = c("EGFR:A289V"),
-               CGCNS133P_2 = 'EGFR:R108K')
+batch_scores = readRDS(here('output', '02-artemis-delfi', 'batch_aware_artemis_delfi_scores.rds'))
 
-GL.list = list(CGCNS36P_2 = 'BRCA1:M1361L', 
-               CGCNS23P_2 = 'BRCA2:S976I')
+batch_codes = readRDS(here('output', '02-artemis-delfi', 'metadata_with_code_annotation.rds'))
 
-CHIP.list = list(CGCNS72P_2 = 'TET2:n/a', 
-                CGCNS124P_2 = 'TET2:C1642*',
-                CGCNS42P_2 = 'DNMT3B:L489F', 
-                CGCNS74P_2 = c('TET2:R1214G', 'TET2:Q1445*'),
-                CGCNS124P_2 = 'TET2:C1642*', 
-                CGCNS29P_2 = 'RUNX1:D30N')
-
-pdx = data.frame()
-
-for (sample.id in names(TS.list)){
-  for (var.id in TS.list[[sample.id]]){
-    pdx = rbind(pdx, data.frame(id = sample.id, mut = var.id, origin = 'Tumor-Specific', allele = 'WT', L = s[[sample.id]][[var.id]][['wt']]))
-    pdx = rbind(pdx, data.frame(id = sample.id, mut = var.id, origin = 'Tumor-Specific', allele = 'MUT', L = s[[sample.id]][[var.id]][['mut']]))
-  } 
-}
-  
-for (sample.id in names(GL.list)){
-  for (var.id in GL.list[[sample.id]]){
-    pdx = rbind(pdx, data.frame(id = sample.id, mut = var.id, origin = 'Germline', allele = 'WT', L = s[[sample.id]][[var.id]][['wt']]))
-    pdx = rbind(pdx, data.frame(id = sample.id, mut = var.id, origin = 'Germline', allele = 'MUT', L = s[[sample.id]][[var.id]][['mut']]))
-  } 
-}  
-  
-for (sample.id in names(CHIP.list)){
-  for (var.id in CHIP.list[[sample.id]]){
-    pdx = rbind(pdx, data.frame(id = sample.id, mut = var.id, origin = 'CHIP', allele = 'WT', L = s[[sample.id]][[var.id]][['wt']]))
-    pdx = rbind(pdx, data.frame(id = sample.id, mut = var.id, origin = 'CHIP', allele = 'MUT', L = s[[sample.id]][[var.id]][['mut']]))
-  } 
-}   
-
-pdx = pdx %>% filter(L > 50 & L < 250)
-
-pdx$origin = factor(pdx$origin, levels = c('Tumor-Specific', 'CHIP', 'Germline'))
-pdx$mut = as.character(pdx$mut)
-
-pdx = pdx %>% 
-      unite('key', c('origin', 'allele'), remove = FALSE) %>%
-      unite('var', c('id', 'mut'), sep = '|', remove = FALSE) %>% 
-      arrange(origin, mut) 
-
-pdx$var = factor(pdx$var, levels = unique(pdx$var))
-pdx$key = factor(pdx$key, levels = unique(pdx$key))
-
-cols = c("#FB9A99", "#E31A1C", "#B2DF8A", "#33A02C", "#A6CEE3", "#1F78B4")
-names(cols) = levels(pdx$key)
-
-g = ggplot(pdx , aes(x = L, color = key)) + 
-    stat_ecdf(size = 0.65) + 
-    coord_cartesian(xlim = c(50,250)) + 
-    theme_pubr() + 
-    facet_wrap(~var, ncol = 5 ) + 
-    scale_color_manual(values = cols, name = '')+ 
-    theme(legend.position = 'bottom') + 
-    labs(x = 'Fragment Length', y = 'Cumulative Frac. of cfDNA Fragments')
-
-plot(g)
+scores$training = scores$id %in% training.ids
 ```
+
+```{r functions, echo = FALSE, message=FALSE, warning=FALSE}
+# [2] define functions
+
+prep_roc <- function(test, col, title){
+  test$score = test[,col]
+  roc.obj <- pROC::roc(test$type, test$score)
+  auc.array    <- ci.auc(roc.obj, conf.level=0.95, method="delong")
+  formattedAUC <- paste0( sprintf('%0.2f', auc.array[2]), ' (', sprintf('%0.2f', auc.array[1]), ',', sprintf('%0.2f', auc.array[3]), ')')
+  
+  base <- data.frame(label = paste0(title, formattedAUC), sens = roc.obj$sensitivities, spec = roc.obj$specificities, 
+                     thresh = roc.obj$thresholds) %>% arrange(sens)
+  
+  m <- c(roc.obj$auc)
+  names(m) <- c('AUC')
+  return(list(data = base, metrics = m))
+}
+
+plot_roc <- function(data, title= '', colors = c('#BEBDBE','#5481B1','#E93324','#773324', "#E5F5E0","#A1D99B","#31A354"), legend.label = 'Approach - AUC (95% CI)'){
+    
+    data %>%
+    ggplot(aes(x = spec, y = sens, color = label)) + 
+    geom_vline(xintercept = c(0.95, 0.90), lty = 1, col = '#EEEEEE') + 
+    geom_abline(intercept = 1, slope = 1, lty = 1, col = '#EEEEEE') + 
+    geom_line(linewidth = 0.5) + 
+    scale_x_reverse(expand = c(0.005,0.05)) +
+    scale_y_continuous(expand= c(0.005,0.05)) +
+    theme_classic() +
+    scale_color_manual(values = colors, name = legend.label) + 
+    labs(title = title, x = 'Specificity\n', y = 'Sensitivity') 
+}
+    
+```
+
+```{r score_distribution, echo = FALSE, message=FALSE, warning=FALSE}
+# [3] score distribution subfigure
+
+base <- metadata %>% 
+        select(alternate_id, type, training, validation, heldout,exclude,drop, pathology._simplified,  ki67.simplified,  mri.enhancement) %>% 
+        filter(validation == FALSE & drop == FALSE)
+#----------------------------------#
+base = merge(base, 
+             scores %>% select(id, artemis.delfi, copynumber), 
+             by.x = 'alternate_id', 
+             by.y = 'id', 
+             all.x = TRUE)
+
+#----------------------------------#
+pd = base %>% 
+     dplyr::rename(pathology.type = pathology._simplified)
+
+pd$pathology.label = NA
+pd$pathology.label[pd$pathology.type == 'Healthy'] = 'Screening\nPopulation Controls'
+pd$pathology.label[pd$pathology.type == 'Trigeminal neuralgia'] = 'Non-neoplastic\nNeurological Controls'
+pd$pathology.label[pd$pathology.type == 'Non-cancerous CNS Disease'] = 'Non-neoplastic\nNeurological Controls'
+pd$pathology.label[pd$pathology.type == 'Grade I'] = 'LG Glioma\nI/II'
+pd$pathology.label[pd$pathology.type == 'Grade II'] = 'LG Glioma\nI/II'
+pd$pathology.label[pd$pathology.type == 'Grade III'] =  'HG Glioma\nIII'
+pd$pathology.label[pd$pathology.type == 'Grade IV'] =  'GBM\nIV'
+pd$pathology.label[pd$pathology.type == 'Rec Grade IV'] = 'Rec GBM\nIV'
+pd$pathology.label[pd$pathology.type == "Metastasis"] = "Other Cancers\nBrain Metastases"
+pd$pathology.label[pd$pathology.type == "CNS Lymphoma"] = "Other Cancers\nBrain Metastases"
+
+pd <- pd %>% 
+      filter(! is.na(pathology.label))
+#----------------------------------#
+
+pd = pd %>% 
+     group_by(pathology.label) %>%
+     mutate(n = n()) %>% 
+     unite('pathology.assigned', pathology.label:n, sep = '\n(n = ', remove = FALSE) %>%
+     mutate(pathology.assigned = paste0(pathology.assigned, ')')) %>% 
+     ungroup()
+
+pd$pathology.label = factor(pd$pathology.label, 
+                            levels = c('Screening\nPopulation Controls', 
+                                       'Non-neoplastic\nNeurological Controls' , 
+                                       'LG Glioma\nI/II' ,
+                                       'HG Glioma\nIII', 
+                                       'GBM\nIV', 
+                                       'Rec GBM\nIV', 
+                                       "Other Cancers\nBrain Metastases"))
+pd <- pd %>% arrange(pathology.label)
+pd$pathology.assigned = factor(pd$pathology.assigned, levels = unique(pd$pathology.assigned))
+
+
+pd$pathology.group = rep(NA, nrow(pd))
+pd[pd$pathology.label %in% c('Screening\nPopulation Controls', 'Non-neoplastic\nNeurological Controls'), 'pathology.group'] = 'Non-Cancer'
+pd[pd$pathology.label %in% c('LG Glioma\nI/II',  'HG Glioma\nIII', 'GBM\nIV','Rec GBM\nIV'), 'pathology.group'] = 'Cancer Grade'
+pd[pd$pathology.label %in% c("Other Cancers\nBrain Metastases", 'CNS Lymphoma'), 'pathology.group'] = 'Other malignancies'
+pd$pathology.group = factor(pd$pathology.group, levels = c('Non-Cancer','Cancer Grade',  'Other malignancies'))
+
+main = pd %>% dplyr::rename(xp = pathology.assigned, group = pathology.group)
+```
+
+```{r roc_training, echo = FALSE, message=FALSE, warning=FALSE}
+
+base = base %>% filter(training == TRUE)
+
+base$type = factor(base$type, levels = c('healthy', 'cancer'))
+
+lib = batch_scores$library %>% 
+      select(id, score) %>% 
+      dplyr::rename(library_score = score)
+seq = batch_scores$seq %>% 
+      select(id, score) %>% 
+      dplyr::rename(sequencing_score = score)
+base = merge(base, lib, by.x = 'alternate_id', by.y = 'id', all.x = TRUE)
+base = merge(base, seq, by.x = 'alternate_id', by.y = 'id', all.x = TRUE)
+
+ad.pd <- prep_roc(subset(base, alternate_id %in% training.ids), 'artemis.delfi', 'ARTEMIS-DELFI - ')
+
+lib.pd <- prep_roc(subset(base, alternate_id %in% training.ids), 'library_score', 'Library Batching - ')
+
+# seq.pd <- prep_roc(subset(base, alternate_id %in% training.ids), 'sequencing_score', 'Sequencing Batching - ')
+
+# plot.data = rbind(ad.pd$data, lib.pd$data, seq.pd$data)
+plot.data = rbind(ad.pd$data, lib.pd$data)
+
+# plot.data <- rbind(ad.pd$data, cn.pd$data)
+# plot.data = ad.pd$data
+plot.data$label = factor(plot.data$label, levels = unique(plot.data$label))
+
+theme_adj = theme(legend.position = c(0.60, 0.15), plot.title = element_text(hjust = 0.5,size = 13),
+                  legend.text = element_text(size = 8),
+                  legend.title = element_text(size = 8),
+                  axis.title = element_text(size = 13),
+          legend.background = element_blank())
+    
+part1 = plot_roc(plot.data, 
+                   'Training Set (All Grades)', 
+                   colors = c('#66c2a5', '#fc8d62', '#8da0cb')) + 
+    theme_pubr() + 
+    theme_adj + 
+  theme(legend.text = element_text(size = 9), legend.title = element_text(size= 9))
+
+```
+
+```{r figure, echo = FALSE, message=FALSE, warning=FALSE, fig.height = 5, fig.width = 12, dev = c('png', 'pdf')}
+
+pd = base %>% 
+     filter(training == TRUE) %>% 
+     select(alternate_id, type, pathology._simplified, artemis.delfi)
+pd = merge(pd, 
+           batch_codes %>% 
+           select(alternate_id, library.code, sequencing.code),
+           by = 'alternate_id', all.x = TRUE)
+
+pd = pd %>% 
+     filter(pathology._simplified %in% c('Healthy', 'Trigeminal neuralgia'))
+
+part2 = ggplot(pd, aes(x = library.code)) +
+     geom_boxplot(aes(y = artemis.delfi), width = 0.2, outlier.colour = NA, fill = '#7570b3', alpha = 0.3, size = 0.7) +
+     geom_jitter(aes(y = artemis.delfi), width = 0.10, color = '#7570b3', size= 0.75, alpha = 0.5) +
+     facet_grid(~pathology._simplified, scales = 'free_x', space = 'free') +
+     theme_classic() +
+     scale_y_continuous(limits= c(0, 1.25), breaks = seq(0,4) * 0.25) +
+     labs(x = 'Library Batch', y = 'ARTEMIS-DELFI Score') + 
+     theme(axis.text.y = element_text(color = 'black', size = 9),
+           axis.text.x = element_blank(), 
+           axis.ticks.x = element_blank(),
+           strip.text = element_text(size = 11))
+
+
+
+```
+
+```{r tumor_scores_by_source, echo = FALSE, warning = TRUE, message = TRUE, fig.height=5, fig.width = 5, dev = c('png', 'pdf')}
+cancer_src = metadata %>% filter(type == 'cancer') %>% select(alternate_id, pathology._simplified, tumor_subset_pathology, source)
+
+p1 = cancer_src %>% 
+     filter(source == 'JHU') %>% 
+     filter(tumor_subset_pathology %in% c("Active glioblastoma (WHO grade IV)", "Active glioblastoma(WHO grade IV)" ,
+                                          "Active glioblastoma (WHO grade IV)_EDTA", "Active glioblastoma(WHO grade IV)-IDH1 WT",
+                                          "Glioblastoma"))
+p2 = cancer_src %>% 
+     filter(source == "SNU") %>% 
+     filter(tumor_subset_pathology %in% c("Active glioblastoma(WHO grade IV)"))
+
+p3 = cancer_src %>% 
+     filter(source == "Lodz") %>% 
+     filter(tumor_subset_pathology == 'Glioblastoma')
+
+
+base = rbind(p1 %>% select(alternate_id, source),
+             p2 %>% select(alternate_id, source), 
+             p3 %>% select(alternate_id, source))
+
+base = merge(base, scores %>% select(id, artemis.delfi), by.x = 'alternate_id', by.y = 'id', all.x = TRUE)
+
+
+counts = base %>% 
+            group_by(source) %>% 
+            tally() %>% 
+            dplyr::rename(counts = n) %>% 
+            unite("xlab", source:counts, sep = '\n(n=', remove = FALSE) %>% 
+            mutate(xlab = paste0(xlab, ')')) %>% 
+            select(source, xlab)
+
+base = merge(base, counts, by = 'source', all.x = TRUE)
+base$source = factor(base$source, levels = c('JHU', 'SNU', 'Lodz'))
+base = base %>% arrange(source) %>% mutate(xlab = factor(xlab, levels = unique(xlab)))
+
+first_pair = base %>% filter(source %in% c('JHU', 'SNU')) %>% pull(xlab) %>% unique() %>% as.character()
+second_pair = base %>% filter(source %in% c('JHU', 'Lodz')) %>% pull(xlab) %>% unique() %>% as.character()
+third_pair = base %>% filter(source %in% c('SNU', 'Lodz')) %>% pull(xlab) %>% unique() %>% as.character()
+
+
+gbm_batch = ggplot(base, aes(x = xlab, y = artemis.delfi)) + 
+    geom_boxplot(outlier.color = NULL, width = 0.4) + 
+    geom_jitter(width = 0.2, aes(fill = source), pch = 21, color = '#aaaaaa') + stat_compare_means() + 
+    theme_pubr() + 
+    labs(x = 'Sample Source', y = 'ARTEMIS-DELFI Score') + 
+    scale_fill_brewer(palette = 'Greys', name = '') + 
+    scale_y_continuous(breaks = seq(0,4) * 0.25) + 
+    theme(legend.position = 'none') + 
+    stat_compare_means(comparisons = list(c(first_pair),  c(third_pair), c(second_pair)), label.y = c(1, 1.05, 1.1), test = wilcox.test)
+
+p = as_gtable(gbm_batch)
+p$grobs[[6]]$children[[5]]$label = ''
+
+gbm_batch = as_ggplot(p)
+# plot(gbm_batch)
+```
+
+```{r FigureS3, fig.width=9, fig.height=9, dev = c('png','pdf')}
+plot_grid(part2, plot_grid(gbm_batch, part1, ncol = 2, labels = c('B', 'C')), ncol =1, labels = c('A', ''))
+```
+
+
+
