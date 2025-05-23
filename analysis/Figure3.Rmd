@@ -1,236 +1,203 @@
 ---
-title: "Figure 3. Comparison of ARTEMIS-DELFI Approach with Mutation-based Analysis using Plasma cfDNA"
-site: workflowr::wflow_site
-date: "`r format(Sys.time(), '%d %B, %Y')`"
-output:
-  workflowr::wflow_html:
-    code_folding: hide
-    toc: true
-    keep_md: true
-editor_options:
-  chunk_output_type: console
+title: "Figure 3. Survival analyses of patients with molecularly defined untreated glioblastoma using ARTEMIS-DELFI model components"
+author: ""
+date: '2025-04-03'
+output: html_document
 ---
 
-```{r caching, echo=FALSE}
-knitr::opts_chunk$set(autodep = TRUE)
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r packages, message=FALSE, warning = FALSE, message = FALSE }
+```{r packages, message=FALSE, warning=FALSE, echo = FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(ggplot2)
-library(ggfortify)
 library(RColorBrewer)
+library(ggfortify)
+library(ggh4x)
 library(ggpubr)
-library(ggforce)
-library(reshape2)
+library(latex2exp)
 library(data.table)
-library(pROC)
+library(reshape2)
 library(cowplot)
+library(pROC)
 library(here)
-```
-
-```{r load.data, warning = FALSE, message = FALSE }
-load(here('output', '01-rbrain', 'metadata.rda'))
-load(here('output', '01-rbrain', 'plasma_maf.rda'))
-load(here('output', '02-artemis-delfi', 'scores.rda'))
-
-training.ids = metadata %>% filter(training == TRUE) %>% pull(alternate_id)
-heldout.ids = metadata %>% filter(heldout == TRUE) %>% pull(alternate_id)
-validation.ids = metadata %>% filter(validation == TRUE) %>% pull(alternate_id)
-
-base = merge(metadata, scores, by.x = 'alternate_id', by.y = 'id', all.x = TRUE)
-base = base %>% separate('alternate_id', into = c('id', 'suffix'), sep = '_', remove = FALSE)
-
-pd = merge(plasma_maf, base, by = 'id', all.x = TRUE) 
-pd = pd %>% mutate(maf.log = (log10(maf)+6) / 6) 
-
-# These thresholds are determined by specificity analysis on the 
-# training set from the discovery cohort (Please see Figure2.Rmd).
-thresholds = list(`0.90` = 0.304, `0.95` = 0.429)
-```
-
-```{r artemis_delfi_maf, warning = FALSE, message = FALSE }
-
-lowest = pd %>% 
-         filter(maf.log != 0)  %>% 
-         group_by(id) %>% 
-         summarize(maf.log = min(maf.log), artemis.delfi = unique(artemis.delfi)) %>% 
-         ungroup() %>% 
-         data.frame()
-
-
-ids = unique(pd$id)
-pos.ids = pd %>% arrange(artemis.delfi) %>% filter(maf.log!= 0) %>% pull(id) %>% unique() 
-neg.ids = setdiff(ids, pos.ids)
-
-pos.labels = pd %>% 
-             filter(id %in% pos.ids) %>% 
-             select(id, artemis.delfi, maf.log) %>% 
-             group_by(id, artemis.delfi) %>% summarize(maf.log = max(maf.log) * 1.04) %>% 
-             ungroup() %>% 
-             data.frame()
-
-pd$delfi.detected = ifelse(pd$artemis.delfi >= thresholds$`0.90`, 'ARTEMIS-DELFI+', 'ARTEMIS-DELFI-')
-pd$mut.detected = ifelse(pd$maf.log != 0, 'Mut+', 'Mut-')
-
-pd$cat = pd %>% 
-         select(delfi.detected, mut.detected) %>% 
-         unite('cat', delfi.detected:mut.detected, sep = ',') %>% 
-         pull(cat)
-pd$cat = factor(pd$cat, 
-                levels = c('ARTEMIS-DELFI+,Mut-', 'ARTEMIS-DELFI+,Mut+', 
-                           'ARTEMIS-DELFI-,Mut-', 'ARTEMIS-DELFI-,Mut+'))
-
-cols = setNames(c('#67c1c7', '#6a51a3', '#aaaaaa', '#fdae6b'), levels(pd$cat))
-
-set.seed(1)
-g = ggplot(pd) + 
-    annotate('segment', y  = thresholds$`0.90`  , yend = thresholds$`0.90`, x = 0, xend = Inf, color = '#67c1c7', linetype = 'solid', linewidth =0.2) + 
-    annotate('segment', x  = 0.02 , xend = 0.02, y = 0, yend = Inf, color = '#555555', linetype = 'solid', linewidth =0.2) + 
-    annotate('text', y = thresholds$`0.90` + 0.01 , x = 1.27, label = 'Spec\n90%', size = 2.5) + 
-    geom_point(data = pd,  aes(y = artemis.delfi, x = maf.log, shape = method, color = cat), size = 3, alpha =0.7) + 
-    geom_segment(data = lowest, aes(y = artemis.delfi, yend = artemis.delfi , x = maf.log), xend = 0, color = 'grey', linetype = 'dotted', linewidth = 0.5, show.legend = FALSE) + 
-    geom_text(data = pos.labels, aes(y = artemis.delfi, x = maf.log, label = id), color = 'darkgrey', size= 3, angle = 0, hjust = 0, show.legend = FALSE) + 
-    scale_x_continuous(labels = function(x) gsub('1e-06', '<LOD', formatC(10^(6 * x  - 6), digits = 2)), breaks = c(0, 0.5, 0.67, 0.783, 1, 1.1), limits= c(-0.02, 1.7)) + 
-    scale_y_continuous(limits= c(0,1), expand = c(0,0), breaks = seq(0,4) * 0.25) + 
-    scale_shape_manual(name = 'Analysis Type', values = c(16, 18) ) + 
-    theme_classic() + 
-    theme(legend.position = c(0.5, 0.57), axis.text = element_text(color = 'black'), legend.title = element_text(size= 8), legend.text = element_text(size = 9), legend.background = element_rect(fill = NA, color = NA)) + 
-    scale_color_manual(values = cols, name = 'Detection') + 
-    labs(y = 'ARTEMIS-DELFI Score', x = 'MAF (%)') 
-
-g = g + theme(legend.position = c(0.73, 0.46 ), legend.text = element_text(size = 6), legend.box.background = element_rect(color = 'black', linewidth = 0.3), legend.spacing.y = unit(0, 'cm'), legend.key.height = unit(0.18, 'cm'))
-
-
-part.a = g
+library(survival)
+library(survminer)
+library(patchwork)
+library(finalfit)
+library(openxlsx)
+library(viridis)
 
 ```
 
-```{r data_table, warning = FALSE, message = FALSE }
-DT::datatable(pd %>% 
-              filter(maf > 1e-5) %>% 
-              select(id, gene, maf, method), filter = 'top')
+```{r load_data,warning=FALSE, echo=FALSE}
+# load('../output/02-artemis-delfi/scores.rda')
+base = fread('../output/02-artemis-delfi/Cross_Validation_scores.csv')
+base$V1 = NULL
+
+models = unique(base$model)
+keep = c(models[grepl('ssl', models)], 'Cov_GBM', 'ARTEMIS_Ensemble', 'ARTEMIS_single_DELFI_SSLs_Ensemble')
+base = base %>% filter(model %in% keep)
+
+load('../output/01-rbrain/metadata.rda')
+
+metadata = metadata %>% separate(col = 'alternate_id', sep = '_', into = c('prefix', 'suffix'), remove = FALSE)
+
+base$id = gsub('CGCNS23P', 'CGCNS23P_1', base$id)
+scores = merge(base, metadata %>% select(alternate_id, prefix), by.x = 'id', by.y = 'alternate_id')
+
+#--------------------------------------#
+base = read.xlsx('../data/survival_data.xlsx', 1)
+colnames(base) = c('id', 'age', 'sex', 'os_days', 'os_cens')
+base$os_months = base$os_days / 30.44
+base$score = NULL
+base$score_cat = NULL
+# base$score = NULL
+
+base = merge(base, scores %>% select(prefix, score, model),
+             by.x ='id', by.y = 'prefix', all.x = TRUE)
+#--------------------------------------#
 ```
 
-```{r maf.performance.ens, warning = FALSE, message = FALSE  }
+```{r coxph_univariate, echo = FALSE, warning=FALSE, message = FALSE, dev = c('png', 'pdf'), fig.width=8, fig.height = 6}
 
-base = pd %>% filter(method == 'Targeted Sequencing')
+thresh = c(2:19) * 0.05
+pd = data.frame()
 
-scores = base %>% select(id,  artemis.delfi) %>% unique() 
-# calculate the sensitivity at 90% spec
-# thresholds are: 90% spec (0.281), 95% spec (0.45)
-sens.95 = (scores %>% filter(artemis.delfi >= thresholds$`0.95`) %>% nrow())  / (scores %>% nrow())
-sens.90 = (scores %>% filter(artemis.delfi >= thresholds$`0.90`) %>% nrow())  / (scores %>% nrow())
-sens.mut = (base %>% filter(maf > 1e-6) %>% pull(id) %>% unique() %>% length()) / (base %>% pull(id) %>% unique() %>% length())
-
-plot.data = data.frame(source = c('ARTEMIS-DELFI\n(Spec 95%)', 'ARTEMIS-DELFI\n(Spec 90%)', 'Mutation-Based\nApproach (TS)'), 
-                       values = c(sens.95, sens.90, sens.mut))
-plot.data$label = paste(round(plot.data$values * 100, digits = 1), '%', sep = '')
-
-plot.data$source = factor(plot.data$source, levels = rev(c('ARTEMIS-DELFI\n(Spec 90%)', 'ARTEMIS-DELFI\n(Spec 95%)', 'Mutation-Based\nApproach (TS)')))
-
-cols = c('#02818a','#67c1c7', '#fdae6b')
-names(cols) = plot.data$source
+base = base %>% 
+       filter(! model %in% c("ARTEMIS_single_DELFI_SSLs_Ensemble","ARTEMIS_Ensemble", "Ratios_ssl"))
 
 
-set.seed(1)
-p2 = ggplot(plot.data %>% filter(! grepl('95', source)), aes(x = source, y = values, fill = source)) + 
-     geom_bar(stat = 'identity', width = 0.7)+ 
-     theme_pubr() + 
-  geom_text(aes(x = source, y = values + 0.03, label = label)) + 
-     scale_y_continuous(expand = c(0.01,0.05)) + 
-     scale_fill_manual(values = cols, name = '', guide = NULL) + 
-     theme(legend.position = 'none', axis.text.x = element_text(size= 10), axis.title.y = element_text(size = 9.5)) + labs(y = 'Sensitivity', x = '') 
+for (cutoff in thresh){
+    for (sm in unique(base$model)){
+        rows = base %>% filter(model == sm)
+        rows$score_cat = factor(ifelse(rows$score >= cutoff, 'High', 'Low'), levels = c('Low', 'High')) 
+        
+        cox = coxph(Surv(os_months, os_cens) ~ score_cat, data = rows)
+        cox.summary = summary(cox)
+        hr = cox.summary$conf.int[c(1,3,4)]  %>% round(., 2)
+        hr.string = paste0(hr[1], '(', hr[2], '-', hr[3], ')')
+        
+        pd = rbind(pd, data.frame(threshold = cutoff, 
+                                  model = sm, 
+                            n_Low = length(which(rows$score_cat == "Low")),
+                            n_High = length(which(rows$score_cat == "High")),
+                            HR = hr.string,
+                            uni.coef.pval = summary(cox)$coefficients[1,'Pr(>|z|)'],
+                            uni.logrank = cox.summary$sctest[['pvalue']]))
+  
+    }
+}
 
-part.c = p2
-```
+pd$model = gsub('_ssl', '', pd$model)
 
-```{r maf.venn.ens, warning = FALSE, message = FALSE  }
+pd$model = gsub('Epi', 'Epigenetic', pd$model)
+pd$model = gsub('zscores', 'Chromosomal Arm', pd$model)
+pd$model = gsub('Sat', 'Satellite', pd$model)
+pd$model = gsub('RNA_TE', 'RNA/TE', pd$model)
+pd$model = gsub('Cov_GBM', 'Fragment Coverage', pd$model)
+pd$model = gsub('SINE', 'SINE', pd$model)
+pd$model = gsub('LINE', 'LINE', pd$model)
+pd$model = gsub('LTR', 'LTR', pd$model)
 
-x = data.frame(x0 = c(0, 7, -24), 
-               y0 = c(0, 0 ,0), 
-               r = c(50, 43, 3), 
-               gr = c('Samples Analyzed\n(n=49)', 'ARTEMIS-DELFI Positive\n(n=34)','Mutation-Based\n(n=3)'),
-               alpha= c(0.89, 0.89, 0.89))
-
-x$gr = factor(x$gr, levels = x$gr)
-cols = c('#FCEBDF', '#67c1c7', '#fdae6b')
-names(cols) = x$gr
-
-p3 = ggplot() + 
-  stat_circle(aes(x0 = 0, y0 = 0, r = 50), color = 'darkgrey', fill = '#FCEBDF') + 
-  stat_circle(aes(x0 = 7, y0 = 0, r = 43), color = 'darkgrey', fill = '#02818a')  + 
-  stat_circle(aes(x0 = -37, y0 = 0, r = 3), color = 'darkgrey', fill = 'orange', alpha = 0.35) +
-    theme_void() + 
-    annotate('text', x= 0, y =46.5, label = 'Samples Analyzed\n(n=49)', size = 2.5) + 
-    annotate('text', x= 14, y =0, label = 'ARTEMIS-DELFI Positive\n(n=34, 69%)', size =2.5, color = 'white') + 
-    annotate('text', x= -42 , y =10, label = 'Mutation Positive\n(n=3, 6%)', size = 2.5) + 
-    annotate('segment', x= -35, xend = -35, yend =0, y = -25, linewidth = 0.3, color = 'black') + 
-    annotate('segment', x= -42, xend = -37, yend =1, y =5, linewidth = 0.3, color = 'black') + 
-    annotate('text', x= -35 , y = -25, label = '(n=1, 2%)', size = 2.5)
-
-part.b = p3
-```
-
-```{r novaseq.frag.length, warning = FALSE, message = FALSE }
-s = readRDS(here('data', '03-targeted-sequencing', 'fragment_lengths.rds'))
+pd$model = factor(pd$model, levels = )
 
 
-TS.list = list(CGCNS67P_2 = c("ACVR1B:T206I", "CD79B:R114Q", "CSF1R:R378H" , "SETD2:R1826C", "ERBB3:n/a", "FGF10:N147D", "PIK3C2B:K1415*","TP53:R248W"),
-               CGCNS118P_2 = c("EGFR:A289V"),
-               CGCNS133P_2 = 'EGFR:R108K')
+pt = ggplot(pd, 
+            aes(x = threshold, y = uni.coef.pval, group = model, color = model)) +
+     geom_point(alpha = 0.85) + 
+     geom_line(alpha = 0.85) +
+     geom_hline(yintercept = 0.05, linetype = 'dashed', color = 'red', linewidth =0.25) + 
+     theme_classic() + 
+     scale_y_log10(breaks = c(0.0001, 0.001, 0.05, 0.01, 0.1, 1), labels =  c(0.0001, 0.001, 0.05, 0.01, 0.1, 1)) + 
+     scale_x_continuous(breaks = c(0.1, 0.25, 0.50, 0.75, 0.95), limits= c(0.09, 0.96))+ 
+     scale_color_brewer(palette = 'Set2', name = 'Model')+ 
+     theme(axis.text = element_text(color ='black'), legend.position = c(0.2, 0.37), legend.background =  element_blank()) + 
+     labs(x = 'Model Score Threshold', y = 'Univariate CoxPH Model (p-value)')
 
-GL.list = list(CGCNS36P_2 = 'BRCA1:M1361L', 
-               CGCNS23P_2 = 'BRCA2:S976I')
+threshold_trace_univariate =pt
 
-CHIP.list = list(CGCNS72P_2 = 'TET2:n/a', 
-                CGCNS124P_2 = 'TET2:C1642*',
-                CGCNS42P_2 = 'DNMT3B:L489F', 
-                CGCNS74P_2 = c('TET2:R1214G', 'TET2:Q1445*'),
-                CGCNS124P_2 = 'TET2:C1642*', 
-                CGCNS29P_2 = 'RUNX1:D30N')
-
-
-ts.mut = lapply(names(TS.list), function(x) unlist(lapply(TS.list[[x]], function(y) s[[x]][[y]]$mut))) %>% unlist()
-ts.wt = lapply(names(TS.list), function(x) unlist(lapply(TS.list[[x]], function(y) s[[x]][[y]]$wt))) %>% unlist()
-
-gl.mut = lapply(names(GL.list), function(x) unlist(lapply(GL.list[[x]], function(y) s[[x]][[y]]$mut))) %>% unlist()
-gl.wt = lapply(names(GL.list), function(x) unlist(lapply(GL.list[[x]], function(y) s[[x]][[y]]$wt))) %>% unlist()
-
-chip.mut = lapply(names(CHIP.list), function(x) unlist(lapply(CHIP.list[[x]], function(y) s[[x]][[y]]$mut))) %>% unlist()
-chip.wt = lapply(names(CHIP.list), function(x) unlist(lapply(CHIP.list[[x]], function(y) s[[x]][[y]]$wt))) %>% unlist()
-
-pd = data.frame(value = c(ts.mut, ts.wt, gl.mut, gl.wt, chip.mut, chip.wt),
-                origin = c(rep('Tumor-Specific', length(ts.mut) + length(ts.wt)),
-                           rep('Germline', length(gl.mut) + length(gl.wt)),
-                           rep('CHIP', length(chip.mut) + length(chip.wt))),
-                allele = c(rep('MUT', length(ts.mut)), rep('WT', length(ts.wt)), rep('MUT', length(gl.mut)), rep('WT', length(gl.wt)), 
-                           rep('MUT', length(chip.mut)), rep('WT', length(chip.wt))))
-
-pd$origin = factor(pd$origin, levels = c('Tumor-Specific', 'Germline', 'CHIP', 'WT'))
-
-pd = pd %>% filter(value > 50 & value < 250)
-
-pd[pd$allele == 'WT', 'origin'] = 'WT'
-
-p4 = ggplot(pd , aes(x = value, color = origin)) + 
-     stat_ecdf(linewidth = 0.65) + 
-     coord_cartesian(xlim = c(50,250)) + 
-     theme_pubr() + 
-     labs(x = 'Fragment Length', y = 'Cumulative Frac. of cfDNA Fragments', color = '') + 
-     scale_color_manual(values = c('#E64B35FF', '#4DBBD5FF', '#3C5488FF' ,'#aaaaaa')) + 
-     theme(legend.text = element_text(size = 8), axis.title.y = element_text(size = 9.5))
-
-part.d = p4
 ```
 
 
-```{r Figure3, fig.height = 9, fig.width = 9, dev = c('png', 'pdf'), warning = FALSE, message = FALSE}
+```{r coxph_km_zscore_0.75, echo = FALSE, include = TRUE, message=TRUE, warning=FALSE, fig.width=5, fig.height=5, dev = c('png', 'pdf')}
+  
+  pd = base %>% filter(model == 'zscores_ssl') 
+  pd$cat = factor(ifelse(pd$score >= 0.75, '>=0.75', '<0.75'), levels = c('<0.75', '>=0.75'))
 
-right.col = plot_grid(part.b, part.c, part.d, ncol = 1, rel_heights = c(1.1,1,1), labels = c('b', 'c', 'd'))
-panel = plot_grid(part.a, right.col, ncol = 2, rel_widths = c(1.25, 1), labels = c('a'))
-
-plot(panel)
-
+  delta = survfit(Surv(os_months, os_cens) ~ cat, data = pd)
+  names(delta$strata) = gsub('cat=', '', names(delta$strata) )
+  cx = coxph(Surv(os_months, os_cens) ~ cat, data = pd)
+  cph = summary(cx)
+  delta.summary = summary(delta)$table
+  stats = data.frame(variable = 'OS', n = nrow(pd), LogRank = cph$sctest['pvalue'] , 
+                      Wald = cph$waldtest['pvalue'], Likelihood = cph$logtest['pvalue'],
+                       HR = round(exp(cx$coefficients), 2),
+                       HR.min = round(exp(confint(cx)[1]), 2),
+                       HR.max = round(exp(confint(cx)[2]), 2))
+  g.os = ggsurvplot(delta, data =pd, legend = c(0.70, 0.85), 
+                  ggtheme = theme_classic(), risk.table = TRUE, risk.table.y.text.col = FALSE,break.time.by = 10 )
+  g.os$plot =  g.os$plot + 
+        labs(color = 'Chromosomal Arm Model Score',
+             y = 'Overall Survial Probability', x = 'Time (months)') + 
+        theme(plot.title = element_text(size = 10),
+              axis.text = element_text(color = 'black')) + 
+        annotate('text', x = 32, y  = 0.5, label = 
+                   paste0('HR=', stats$HR, '(', stats$HR.min, '-', stats$HR.max,')' , '\nLogrank p=', formatC(stats$LogRank, 2)), hjust = 0)+ 
+        scale_color_manual(values = c("#67afd7ff", "#fd7894ff"))
+   g.os$table = g.os$table + 
+              theme(plot.title = element_text(size = 10),
+                    axis.text = element_text(color = 'black', size = 10),
+              axis.title= element_blank())
+   
+  g.os_zscore_0.75 = g.os
 ```
+
+```{r coxph_km_epi_0.75, echo = FALSE, include = TRUE, message=TRUE, warning=FALSE, fig.width=5, fig.height=5, dev = c('png', 'pdf')}
+  
+  pd = base %>% filter(model == 'Epi_ssl') 
+  pd$cat = factor(ifelse(pd$score >= 0.75, '>=0.75', '<0.75'), levels = c('<0.75', '>=0.75'))
+
+  delta = survfit(Surv(os_months, os_cens) ~ cat, data = pd)
+  names(delta$strata) = gsub('cat=', '', names(delta$strata) )
+  cx = coxph(Surv(os_months, os_cens) ~ cat, data = pd)
+  cph = summary(cx)
+  delta.summary = summary(delta)$table
+  stats = data.frame(variable = 'OS', n = nrow(pd), LogRank = cph$sctest['pvalue'] , 
+                      Wald = cph$waldtest['pvalue'], Likelihood = cph$logtest['pvalue'],
+                       HR = round(exp(cx$coefficients), 2),
+                       HR.min = round(exp(confint(cx)[1]), 2),
+                       HR.max = round(exp(confint(cx)[2]), 2))
+  g.os = ggsurvplot(delta, data =pd, legend = c(0.70, 0.85), 
+                  ggtheme = theme_classic(), risk.table = TRUE, risk.table.y.text.col = FALSE,break.time.by = 10 )
+  g.os$plot =  g.os$plot + 
+        labs(color = 'Epigenetic Model Score',
+             y = 'Overall Survial Probability', x = 'Time (months)') + 
+        theme(plot.title = element_text(size = 10),
+              axis.text = element_text(color = 'black')) + 
+        annotate('text', x = 32, y  = 0.5, 
+                 label = paste0('HR=', stats$HR, '(', stats$HR.min, '-', stats$HR.max,')' , '\nLogrank p=', formatC(stats$LogRank, 2)), hjust = 0)+ 
+        scale_color_manual(values = c("#67afd7ff", "#fd7894ff"))
+   g.os$table = g.os$table + 
+              theme(plot.title = element_text(size = 10),
+                    axis.text = element_text(color = 'black', size = 10),
+              axis.title= element_blank())
+   
+  g.os_epi_0.75 = g.os
+  
+```
+
+
+```{r Figure5, fig.width = 10, fig.height = 9, dev = c('png', 'pdf'), echo = FALSE}
+
+plot_grid(threshold_trace_univariate, plot_grid(plot_grid(g.os_zscore_0.75$plot,
+                                               g.os_zscore_0.75$table, ncol = 1, rel_heights = c(3, 1)),
+                                    plot_grid(g.os_epi_0.75$plot,
+                                               g.os_epi_0.75$table, ncol = 1, rel_heights = c(3, 1)),
+                                    ncol = 2, labels = c('b', 'c')), ncol =1, labels = c('a', ''), rel_heights = c(0.75, 1.25))
+```
+
+
+
 
