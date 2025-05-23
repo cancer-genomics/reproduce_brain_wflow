@@ -1,5 +1,5 @@
 ---
-title: "Supplementary Figure 1. Schematic Representation of the Ensemble Model Architecture Used for Brain Cancer Prediction"
+title: "Supplementary Figure S1. Schematic representation of the Ensemble model architecture used for brain cancer prediction"
 site: workflowr::wflow_site
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
