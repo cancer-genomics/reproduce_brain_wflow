@@ -1,66 +1,87 @@
 ---
-title: "Supplementary Figure 4. Heatmap Representation of TF RNA Expression Levels by Tissue Type"
-site: workflowr::wflow_site
-date: "`r format(Sys.time(), '%d %B, %Y')`"
-output:
-  workflowr::wflow_html:
-    code_folding: hide
-    toc: true
-editor_options:
-  chunk_output_type: console
+title: "Supplementary Figure S4. Correlation of brain tumor size with ARTEMIS-DELFI scores"
+author: ""
+date: ''
+output: html_document
 ---
 
-```{r caching, echo=FALSE, warning = FALSE, message = FALSE}
-knitr::opts_chunk$set(autodep = TRUE)
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r packages, echo=FALSE, out.width = '100%', warning = FALSE, message = FALSE}
+```{r packages, message=FALSE, warning=FALSE, echo = FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
-library(pbapply)
-library(ComplexHeatmap)
+library(ggplot2)
 library(RColorBrewer)
-library(circlize)
-library(scales)
-library(getopt)
+library(ggfortify)
+library(ggh4x)
+library(ggpubr)
+library(latex2exp)
+library(data.table)
+library(reshape2)
+library(cowplot)
+library(pROC)
 library(here)
+library(survival)
+library(survminer)
+library(patchwork)
+library(finalfit)
+library(openxlsx)
+library(viridis)
+
 ```
 
-```{r load.data, echo=FALSE, out.width = '100%', warning = FALSE, message = FALSE}
-bundle = readRDS(here('data', '04-decifer', 'expression_heatmap_figure_data.rds'))
+```{r load_data, echo=FALSE, warning = FALSE}
 
-annot.df = bundle$annot %>% column_to_rownames('id')
-pd = bundle$expression.mat
+base = fread('../output/02-artemis-delfi/Cross_Validation_scores.csv')
+base$V1 = NULL
+
+models = unique(base$model)
+keep = c(models[grepl('ssl', models)], 'Cov_GBM', 'ARTEMIS_Ensemble', 'ARTEMIS_single_DELFI_SSLs_Ensemble')
+base = base %>% filter(model %in% keep)
+
+load('../output/01-rbrain/metadata.rda')
+
+metadata = metadata %>% separate(col = 'alternate_id', sep = '_', into = c('prefix', 'suffix'), remove = FALSE)
+
+base$id = gsub('CGCNS23P', 'CGCNS23P_1', base$id)
+scores = merge(base, metadata %>% select(alternate_id, prefix), by.x = 'id', by.y = 'alternate_id')
+
+#--------------------------------------#
+size = read.xlsx('../data/tumor_size.xlsx',1)
+colnames(size) = c('id', 'volume', 'score', 'metric')
+size$score = NULL
+
+# size$score = NULL
+size = merge(size, scores %>% select(prefix, model, score),
+             by.x ='id', by.y = 'prefix', all.x = TRUE)
+#--------------------------------------#
 
 ```
 
+```{r FigureS4, echo = FALSE, message = FALSE, warning=FALSE, , dev = c('png', 'pdf'), fig.height = 4, fig.width = 8}
 
-```{r FigureS4, echo=FALSE, out.width = '100%', warning = FALSE, message = FALSE, fig.width = 12, fig.height = 10}
-# color scale for heatmap body
-myCol <- colorRampPalette(c('dodgerblue', 'black', 'yellow'))(100)
-myBreaks <- seq(-3, 3, length.out = 100)
+p.ce = ggplot(size %>% filter(metric == "CE" & model == "ARTEMIS_single_DELFI_SSLs_Ensemble"), 
+                    aes(x = volume, y = score)) + 
+             geom_point() + 
+             theme_pubr() + 
+             labs(x = TeX(sprintf(r'($Volume (cm^3)$)')) ,  y = 'ARTEMIS-DELFI Score', 
+                  title = 'Contrast Enhancement' ) + 
+             stat_cor(label.x = 40, label.y = 0.5, color = 'navy' ) + 
+            theme(plot.margin = margin(t = 0, b = 1.05, l = 0, r = 0, "cm"),
+                  plot.title = element_text(hjust = 0.5))
 
+p.flair = ggplot(size %>% filter(metric == "Flair" & model == "ARTEMIS_single_DELFI_SSLs_Ensemble"),  
+                   aes(x = volume, y = score)) + 
+             geom_point() + 
+             theme_pubr() + 
+             labs(x = TeX(sprintf(r'($Volume (cm^3)$)')) ,  y = 'ARTEMIS-DELFI Score', 
+                  title = 'FLAIR' ) + 
+             stat_cor(label.x = 150, label.y = 0.5, color = 'navy')+ 
+            theme(plot.margin = margin(t = 0, b = 1.05, l = 0, r = 0, "cm"),
+                  plot.title = element_text(hjust = 0.5))
 
-cols = c("#980000", "#cc0000","#e06666","#e69138","#f6b26b",
- "#f9cb9c","#fce5cd","#93c47d","#6aa84f","#38761d",
- "#ffe599","#f1c232","#a4c2f4","#6d9eeb","#1155cc",
- "#ead1dc","#c27ba0","#8e7cc3","#351c75","#cccccc")
+part.b = cowplot::plot_grid(NULL,p.ce, p.flair, NULL, labels = c('', 'A', 'B', ''), ncol = 4, rel_widths = c(0.02, 1, 1, 0.02))
+plot(part.b)
 
-names(cols) = c("Whole Blood", "AML", "DLBC", "CD8 T-Cells", "CD4 T-Cells", "Monocytes", "Neutrophils", "LGG", "GBM", "Tumor Core Astrocytes", "BLCA", "KIRC", "COAD", "STAD", "LIHC", "LUAD", "LUSC", "BRCA", "OV", "PRAD")
-
-colAnn <- HeatmapAnnotation(df= annot.df, which = 'col', na_col = 'white', col = list(source = cols), annotation_legend_param = list(source = list(title = 'Tumor/Cell Type')))
-
-set.seed(1)
-Heatmap(pd, 
-        col = colorRamp2(myBreaks, myCol),
-        cluster_rows = TRUE, 
-        cluster_columns = TRUE, 
-        show_row_dend = TRUE, 
-        show_column_dend = TRUE,
-	show_column_names = FALSE,
-	show_row_names = FALSE,
-	top_annotation = colAnn,
-        use_raster = FALSE,
-	clustering_distance_rows = 'spearman',
-	clustering_distance_columns = 'spearman', heatmap_legend_param = list(title = 'Expression\nLog2(TPM + 0.001)'))
 ```
-
