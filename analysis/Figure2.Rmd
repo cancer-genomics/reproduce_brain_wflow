@@ -27,6 +27,7 @@ library(reshape2)
 library(cowplot)
 library(pROC)
 library(here)
+library(patchwork)
 ```
 
 ```{r load.data, echo = FALSE, message=FALSE, warning=FALSE}
@@ -70,7 +71,9 @@ plot_roc <- function(data, title= '', colors = c('#BEBDBE','#5481B1','#E93324','
     scale_y_continuous(expand= c(0.005,0.05)) +
     theme_classic() +
     scale_color_manual(values = colors, name = legend.label) + 
-    labs(title = title, x = 'Specificity', y = 'Sensitivity') 
+    labs(title = title, x = 'Specificity', y = 'Sensitivity') + 
+    theme(axis.text = element_text(size = 5), axis.title = element_text(size= 5), plot.title = element_text(size = 5),
+          legend.title = element_text(size =5), legend.text = element_text(size =5))
 }
     
 ```
@@ -182,13 +185,13 @@ pval.df$label[pval.df$pval > 1e-3] = paste0('$', sprintf('p=%0.2f', pval.df$pval
 
 pval.df$y = NA
 pval.df$y[pval.df$ref == 'Screening Population'] = 1.1
-pval.df$y[pval.df$ref != 'Screening Population'] = 1.05
+pval.df$y[pval.df$ref != 'Screening Population'] = 1.02
 
 pval.df = merge(pval.df, main %>% select(xp, group) %>% unique(), by = 'xp', all.x = TRUE)
 #------------------------------------#
 part.a = ggplot(main, aes(x = interaction(xp, group), y = artemis.delfi)) + 
-    geom_boxplot(width = 0.2, outlier.colour = NA, fill = '#7570b3', alpha = 0.3, size = 0.7) + 
-    geom_jitter(width = 0.10, color = '#7570b3', size= 0.75, alpha = 0.5) + 
+    geom_jitter(width = 0.10, color = '#7570b3', size= 0.75, alpha = 0.7) + 
+    geom_boxplot(width = 0.2, outlier.colour = NA, fill = '#7570b3', alpha = 0.1, size = 0.7) + 
     labs(x = '', y = 'ARTEMIS-DELFI Score')  + 
     theme_pubr() + 
     scale_x_discrete(NULL, guide = "axis_nested")  + 
@@ -196,19 +199,20 @@ part.a = ggplot(main, aes(x = interaction(xp, group), y = artemis.delfi)) +
 
 part.a = part.a + 
          geom_text(data= pval.df , aes(x = interaction(xp, group), 
-                   label = TeX(label,output = 'character'), y = y, color = ref), size = 5, parse = TRUE) +
+                   label = TeX(label,output = 'character'), y = y, color = ref), size = 3.75, parse = TRUE) +
          scale_color_manual(values = c('#3182bd',  '#ad4e4e'), name = 'Reference Group') +
-         theme(legend.position = c(0.10, 0.94), legend.title = element_text(size = 12), 
-               legend.text = element_text(size = 12), legend.background = element_blank(),  
-               legend.box.background = element_blank()) + 
+         theme(legend.position = c(0.10, 0.90), legend.title = element_text(size = 11), 
+               legend.text = element_text(size = 11), legend.background = element_blank(),  
+               legend.box.background = element_blank(),
+               axis.text = element_text(size= 9)) + 
          guides(color = guide_legend(override.aes = aes(label = ""))) +
-         geom_segment(color = '#3182bd', x = 0.67 , xend = 0.77, y = 1.0755, yend = 1.0755) + 
-         geom_segment(color = '#ad4e4e', x = 0.67 , xend = 0.77, y = 1.035, yend = 1.035)
+         geom_segment(color = '#3182bd', x = 0.52 , xend = 0.60, y = 1.04, yend  = 1.04) + 
+         geom_segment(color = '#ad4e4e', x = 0.52 , xend = 0.60, y = 0.98, yend = 0.98)
 
 
-DT::datatable(pval.df)
+# DT::datatable(pval.df)
 
-DT::datatable(main %>% group_by(pathology.label) %>% summarize(n = n(), score =median(artemis.delfi)))
+# DT::datatable(main %>% group_by(pathology.label) %>% summarize(n = n(), score =median(artemis.delfi)))
 ```
 
 ```{r roc_training, echo = FALSE, message=FALSE, warning=FALSE}
@@ -220,19 +224,22 @@ cn.pd <- prep_roc(subset(base, alternate_id %in% training.ids), 'copynumber', 'C
 
 # plot.data <- rbind(ad.pd$data, cn.pd$data)
 plot.data = ad.pd$data
+plot.data$label = gsub("ARTEMIS-DELFI -", "", plot.data$label)
 plot.data$label = factor(plot.data$label, levels = unique(plot.data$label))
 
-theme_adj = theme(legend.position = c(0.60, 0.15), plot.title = element_text(hjust = 0.5,size = 13),
-                  legend.text = element_text(size = 8),
-                  legend.title = element_text(size = 8),
-                  axis.title = element_text(size = 13),
+theme_adj = theme(legend.position = c(0.60, 0.15), 
+                  plot.title = element_text(hjust = 0.5,size = 9),
+                  axis.title = element_text(size = 9),
+                  axis.text = element_text(size = 8),
+                  legend.text = element_text(size = 6), 
+                  legend.title = element_text(size = 6),
           legend.background = element_blank())
     
 part.b1 = plot_roc(plot.data, 'Training Set (All Grades)', colors = c('#7570b3', '#aaaaaa')) + 
     theme_pubr() + 
-    theme_adj + 
-  theme(legend.text = element_text(size = 11.5), legend.title = element_text(size= 11.5))
-    
+    theme_adj+ 
+    theme(legend.position = 'none') + 
+    annotate("text", x = 0.625, y = 0.15, label = paste0("ARTEMIS-DELFI\nAUC = ", unique(plot.data$label)), size = 2.25, hjust = 0)
 #--------------------------------------------#
 early.ids = base %>% 
             filter(training == TRUE  & 
@@ -244,11 +251,14 @@ ad.pd <- prep_roc(subset(base, alternate_id %in% early.ids), 'artemis.delfi', 'A
 
 # plot.data <- rbind(ad.pd$data,  cn.pd$data)
 plot.data = ad.pd$data
+plot.data$label = gsub("ARTEMIS-DELFI -", "", plot.data$label)
 plot.data$label = factor(plot.data$label, levels = unique(plot.data$label))
 
 part.b2.i_ii = plot_roc(plot.data, 'I/II', colors = c('#7570b3',  '#aaaaaa'),  legend.label = '') +
     theme_pubr() + 
-    theme_adj
+    theme_adj + 
+    theme(legend.position = 'none') + 
+    annotate("text", x = 0.85, y = 0.15, label = paste0("AUC = ", unique(plot.data$label)), size = 2.25, hjust = 0)
 #--------------------------------------------#
 iii.ids = base %>% 
             filter(training == TRUE  & 
@@ -260,11 +270,15 @@ ad.pd <- prep_roc(subset(base, alternate_id %in% iii.ids), 'artemis.delfi', 'ART
 
 # plot.data <- rbind(ad.pd$data,  cn.pd$data)
 plot.data = ad.pd$data
+plot.data$label = gsub("ARTEMIS-DELFI -", "", plot.data$label)
 plot.data$label = factor(plot.data$label, levels = unique(plot.data$label))
 
 part.b3.iii = plot_roc(plot.data, 'III', colors = c('#7570b3',  '#aaaaaa'),  legend.label = '') +
     theme_pubr() + 
-    theme_adj
+    theme_adj+ 
+    theme(legend.position = 'none') + 
+    annotate("text", x = 0.85, y = 0.15, label = paste0("AUC = ", unique(plot.data$label)), size = 2.25, hjust = 0)
+
 #--------------------------------------------#
 iv.ids = base %>% 
           filter(training == TRUE  & 
@@ -276,11 +290,15 @@ ad.pd <- prep_roc(subset(base, alternate_id %in% iv.ids), 'artemis.delfi', 'ARTE
 
 # plot.data <- rbind(ad.pd$data,  cn.pd$data)
 plot.data = ad.pd$data
+plot.data$label = gsub("ARTEMIS-DELFI -", "", plot.data$label)
 plot.data$label = factor(plot.data$label, levels = unique(plot.data$label))
 
 part.b4.iv = plot_roc(plot.data, 'IV', colors = c('#7570b3',  '#aaaaaa'),  legend.label = '') +
     theme_pubr() + 
-    theme_adj
+    theme_adj+ 
+    theme(legend.position = 'none') + 
+    annotate("text", x = 0.85, y = 0.15, label = paste0("AUC = ", unique(plot.data$label)), size = 2.25, hjust = 0)
+
 #--------------------------------------------#
 rec_iv.ids = base %>% 
           filter(training == TRUE  & 
@@ -293,11 +311,15 @@ ad.pd <- prep_roc(subset(base, alternate_id %in% rec_iv.ids), 'artemis.delfi', '
 # plot.data <- rbind(ad.pd$data,  cn.pd$data)
 plot.data = ad.pd$data
 
+plot.data$label = gsub("ARTEMIS-DELFI -", "", plot.data$label)
 plot.data$label = factor(plot.data$label, levels = unique(plot.data$label))
 
 part.b5.rec_iv = plot_roc(plot.data, 'Recurrent (IV)', colors = c('#7570b3',  '#aaaaaa'),  legend.label = '') +
     theme_pubr() + 
-    theme_adj
+    theme_adj+ 
+    theme(legend.position = 'none') + 
+    annotate("text", x = 0.85, y = 0.15, label = paste0("AUC = ", unique(plot.data$label)), size = 2.25, hjust = 0)
+
 #--------------------------------------------#
 p.left = plot_grid(part.b2.i_ii, 
                    part.b3.iii, 
@@ -305,7 +327,10 @@ p.left = plot_grid(part.b2.i_ii,
                    part.b5.rec_iv, 
                    ncol = 2, align = 'hv', axis = 'tblr')
 
-part.b = plot_grid(part.b1, p.left, rel_widths = c(0.75, 1))
+part.b = plot_grid(part.b1, 
+                   plot_grid(part.b2.i_ii, part.b4.iv, align = 'v', axis = 'lr', ncol = 1),
+                    plot_grid(part.b3.iii, part.b5.rec_iv, align = 'v', axis = 'lr', ncol = 1),
+                   rel_widths = c(0.75, 0.5, 0.5),  ncol = 3)
 ```
 
 ```{r score_distribution_validation, echo = FALSE, message = FALSE, warning = FALSE}
@@ -330,13 +355,13 @@ validation = validation %>%
 
 
 validation$pathology.label = NA
-validation$pathology.label[validation$pathology._simplified == 'Control'] = 'Non-neoplastic\nNeurological Controls'
-validation$pathology.label[validation$pathology._simplified %in% c('Grade I', 'Grade II', 'Grade III', 'Grade IV')] = 'Gliomas/GBM' 
-validation$pathology.label[validation$pathology._simplified == "Metastasis"] = "Other Cancers\nBrain Metastases"
+validation$pathology.label[validation$pathology._simplified == 'Control'] = 'Non-neoplastic\nNeurological\nControls'
+validation$pathology.label[validation$pathology._simplified %in% c('Grade I', 'Grade II', 'Grade III', 'Grade IV')] = 'Gliomas\nGBM' 
+validation$pathology.label[validation$pathology._simplified == "Metastasis"] = "Other Cancers\nBrain\nMetastases"
 
 validation$pathology.label = factor(validation$pathology.label, 
-                                    levels = c('Non-neoplastic\nNeurological Controls',
-                                               'Gliomas/GBM' ,"Other Cancers\nBrain Metastases"))
+                                    levels = c('Non-neoplastic\nNeurological\nControls',
+                                               'Gliomas\nGBM' ,"Other Cancers\nBrain\nMetastases"))
 
 validation = validation %>% 
               arrange(pathology.label) %>% 
@@ -353,17 +378,21 @@ p = wilcox.test(validation %>% filter(grepl('GBM', pathology.label)) %>% pull(ar
 annot.df = data.frame(xlab = validation %>% filter(grepl('GBM', pathology.label)) %>% pull(xlab),
                       y = 1.05, 
                       label = ifelse(p < 1e-03, '$p < 10^{-3}$', '$p > 10^{-3}$')) %>% 
-           unique()
+           unique() %>% 
+           mutate(xlab = factor(xlab, levels = levels(validation$xlab)))
  
 
 part.c =  ggplot(validation , aes(x = xlab, y = artemis.delfi)) + 
-    geom_boxplot(width = 0.2, outlier.colour = NA, fill = '#1b9e77', alpha = 0.3, size = 0.7) + 
-    geom_jitter(width = 0.10, color = '#1b9e77', size= 0.75, alpha = 0.5) + 
+    geom_jitter(width = 0.10, color = '#1b9e77', size= 0.75, alpha = 0.7) + 
+    geom_boxplot(data = validation %>% filter(xlab != "Other Cancers\nBrain\nMetastases\nn=2"), 
+                 width = 0.2, outlier.colour = NA, fill = '#1b9e77', alpha = 0.1, size = 0.7) + 
     labs(x = '', y = 'ARTEMIS-DELFI Score', title = 'Independent Validation Set') + 
     theme_pubr() + 
-    geom_text(data= annot.df, aes(x = xlab,  y = y, label = TeX(label, output = 'character')), size = 4.5, color =  '#ad4e4e', parse =TRUE) + 
-    theme(plot.title = element_text(hjust =0.5)) + 
-  scale_y_continuous(limits = c(0,1.15), expand = c(0,0) )
+    geom_text(data= annot.df, aes(x = xlab,  y = y, label = TeX(label, output = 'character')), size = 3.75, color =  '#ad4e4e', parse =TRUE) + 
+    scale_y_continuous(limits = c(0,1.15), expand = c(0,0) ) + 
+    theme(axis.text =element_text(size = 8),
+          axis.title = element_text(size= 9), 
+          plot.title = element_text(size= 9, hjust =0.5)) 
 
 ```
 
@@ -573,7 +602,7 @@ tab = rbind(tab, out)
 
 set.thresholds = tab %>% arrange(model, samples,  sens)
 
-DT::datatable(set.thresholds)
+# DT::datatable(set.thresholds)
 ```
 
 ```{r performance_summary, echo = FALSE, message = FALSE, warning = FALSE}
@@ -604,9 +633,9 @@ validation.est.1 = ci.thresholds(validation.roc, thresholds = thresh)
 
 pd = rbind(pd, 
            training.est.1 %>% unlist() %>% as.data.frame() %>% t() %>% 
-                          data.frame() %>% mutate(x = 'I/II', threshold = thresh, source = 'training', n = n.tr),
+                          data.frame() %>% mutate(x = 'I/II', threshold = thresh, source = 'Training', n = n.tr),
            validation.est.1 %>% unlist() %>% as.data.frame() %>% t() %>% 
-                          data.frame() %>% mutate(x = 'I/II', threshold = thresh, source = 'validation', n = n.va))
+                          data.frame() %>% mutate(x = 'I/II', threshold = thresh, source = 'Validation', n = n.va))
 #---------------------#
 tr = training %>% filter(type == 'healthy' | pathology._simplified %in% c('Grade IV'))
 va = validation %>% filter(type == 'healthy' | pathology._simplified %in% c('Grade IV'))
@@ -624,9 +653,9 @@ validation.est.1 = ci.thresholds(validation.roc, thresholds = thresh)
 
 pd = rbind(pd, 
            training.est.1 %>% unlist() %>% as.data.frame() %>% t() %>% 
-                          data.frame() %>% mutate(x = 'IV', threshold = thresh, source = 'training', n = n.tr),
+                          data.frame() %>% mutate(x = 'IV', threshold = thresh, source = 'Training', n = n.tr),
            validation.est.1 %>% unlist() %>% as.data.frame() %>% t() %>% 
-                          data.frame() %>% mutate(x = 'IV', threshold = thresh, source = 'validation', n = n.va))
+                          data.frame() %>% mutate(x = 'IV', threshold = thresh, source = 'Validation', n = n.va))
 #---------------------#
 tr = training %>% filter(type == 'healthy' | pathology._simplified %in% c('Grade III', 'Grade IV'))
 va = validation %>% filter(type == 'healthy' | pathology._simplified %in% c('Grade III', 'Grade IV'))
@@ -644,10 +673,10 @@ validation.est.1 = ci.thresholds(validation.roc, thresholds = thresh)
 
 pd = rbind(pd, 
            training.est.1 %>% unlist() %>% as.data.frame() %>% t() %>% 
-                          data.frame() %>% mutate(x = 'III/IV', threshold = thresh, source = 'training', n = n.tr))
+                          data.frame() %>% mutate(x = 'III/IV', threshold = thresh, source = 'Training', n = n.tr))
 pd = rbind(pd,
            validation.est.1 %>% unlist() %>% as.data.frame() %>% t() %>% 
-                          data.frame() %>% mutate(x = 'III/IV', threshold = thresh, source = 'validation', n = n.va))
+                          data.frame() %>% mutate(x = 'III/IV', threshold = thresh, source = 'Validation', n = n.va))
 
 
 #------------------------#
@@ -666,8 +695,8 @@ df2 = pd %>% filter(threshold == thresh) %>%
 
 df2$n = NA
 df2$x= 'Non-cancer'
-df2[df2$source == 'validation', 'n'] = validation %>% filter(type == 'healthy' ) %>% nrow()
-df2[df2$source == 'training', 'n'] = training %>% filter(type == 'healthy' ) %>% nrow()
+df2[df2$source == 'Validation', 'n'] = validation %>% filter(type == 'healthy' ) %>% nrow()
+df2[df2$source == 'Training', 'n'] = training %>% filter(type == 'healthy' ) %>% nrow()
 df2 <- df2 %>% dplyr::rename(y = specificity2, ymin = specificity1, ymax = specificity3) 
 df2$metric = 'Specificity'
 
@@ -678,114 +707,57 @@ w$metric = factor(w$metric, levels = c('Specificity', 'Sensitivity'))
 w = w %>% filter(x %in% c('Non-cancer', 'IV'))
 w$x = factor(gsub('IV', 'GBM\nIV', w$x), levels = c('Non-cancer', 'GBM\nIV'))
 
-part.d = ggplot(w, aes(x = x, color = source)) + 
-            geom_errorbar(position = position_dodge(width = 0.3), aes(ymin = ymin, ymax = ymax), width = 0.1) +
-            theme_pubr() + 
-            geom_point(aes(y = y), position = position_dodge(width = 0.3), show.legend = FALSE) + 
-            geom_text(aes(y = ymax + 0.05, label = n),position = position_dodge(width = 0.3), show.legend = FALSE) + 
-            labs(x = '', y = '', color = '') + 
-            facet_wrap(~metric, scales = 'free', strip.position = 'left') + 
-            theme(legend.position = c(0.80, 0.15), 
+w$label = paste(w$source, '\n(n=', w$n, ')', sep = '')
+w$label = factor(w$label, levels = unique(w$label))
+
+
+part.d.spec = ggplot(w %>% filter(metric == "Specificity"), aes(x = label, color = source)) + 
+              geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.1) +
+              theme_pubr() + 
+              geom_point(aes(y = y), position = position_dodge(width = 0.3), show.legend = FALSE) + 
+              labs(x = '', y = 'Specificity', color = '') + 
+              theme(legend.position = 'none', 
                   legend.background = element_blank(),
-                  strip.background = element_blank(), 
-                  strip.placement = 'outside', 
-                  strip.text = element_text(size= 11)) + 
+                  axis.text.x = element_text(size= 8, angle = 90, hjust = 1, vjust = 0.5),
+                  axis.text.y = element_text(size= 8),
+                  axis.title = element_text(size = 9)) + 
             scale_y_continuous(breaks = seq(0,5) * 0.20, labels = function(x) paste0(round(x * 100, 0), '%'), 
                                expand = c(0.0,0.0), limits = c(0,1.05)) + 
             scale_color_manual(values = c('#7570b3', '#1b9e77')) 
+
+part.d.sens = ggplot(w %>% filter(metric == "Sensitivity"), aes(x = label, color = source)) + 
+              geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.1) +
+              theme_pubr() + 
+              geom_point(aes(y = y), position = position_dodge(width = 0.3), show.legend = FALSE) + 
+              labs(x = '', y = 'Sensitivity', color = '') + 
+              theme(legend.position = 'none', 
+                  legend.background = element_blank(),
+                  axis.text.x = element_text(size= 8, angle = 90, hjust = 1, vjust = 0.5),
+                  axis.text.y = element_text(size= 8),
+                  axis.title = element_text(size = 9)) + 
+            scale_y_continuous(breaks = seq(0,5) * 0.20, labels = function(x) paste0(round(x * 100, 0), '%'), 
+                               expand = c(0.0,0.0), limits = c(0,1.05)) + 
+            scale_color_manual(values = c('#7570b3', '#1b9e77')) 
+
+
 
 w$ymin = round(w$ymin, 2)
 w$ymax = round(w$ymax, 2)
 w$y = round(w$y, 2)
 
-DT::datatable(w)
+# DT::datatable(w)
 
 ```
 
-```{r Figure2, fig.width = 22, fig.height=15, dev = c('png', 'pdf')}
+```{r Figure2, fig.width = 13, fig.height=11, dev = c('png', 'pdf')}
 
 part.b = part.b + theme(plot.margin = margin(t = 0, b = 1.39, l = 0, r = 0, "cm"))
-part.d = part.d + theme(plot.margin = margin(t = 0, b = 1.1, l = 0, r = 0, "cm"))
+
 
 set.seed(1)
-element = ggplot_gtable(ggplot_build(part.c))
-element$grobs[[6]]$children[[3]]$children[[3]]$children[[1]]$gp$col = NA
-element$grobs[[6]]$children[[3]]$children[[3]]$children[[1]]$gp$fill = NA
-element$grobs[[6]]$children[[3]]$children[[3]]$children[[2]]$children[[1]]$gp$col = NA
-element$grobs[[6]]$children[[3]]$children[[3]]$children[[2]]$children[[1]]$gp$fill = NA
-
-
-
-tr = plot_grid(part.a, labels = c('a'))
-br = plot_grid(part.b, element, part.d,  ncol = 3, rel_widths = c(2, 0.8, 0.7), labels = c('b', 'c', 'd'))
-
-set.seed(1)
-panel = plot_grid(tr, br, nrow = 2)
+panel = part.a + 
+        (part.b1 + part.b2.i_ii/part.b4.iv + part.b3.iii / part.b5.rec_iv + part.c  + part.d.spec + part.d.sens +plot_layout(ncol = 6, widths = c(0.85, 0.45, 0.45, 0.85, 0.25, 0.25)) + plot_annotation(tag_level = 'a')) + 
+        plot_layout(nrow = 2) + plot_annotation(tag_level = c('a'))
 plot(panel)
-
-```
-
-
-```{r comparisons, message = FALSE, warning  = FALSE}
-periventricular.tumors = c('CGBR2P_1', 'CGCNS101P_1', 'CGCNS103P_1', 'CGCNS140P_1', 'CGCNS65P_2')
-periventricular.scores = subset(scores, id %in% periventricular.tumors) %>% pull(artemis.delfi)
-
-others = setdiff(metadata %>% filter(validation == FALSE) %>% filter(pathology._simplified %in% c('Grade I', 'Grade II')) %>% pull(alternate_id),
-                 periventricular.tumors)
-others.scores = subset(scores, id %in% others) %>% pull(artemis.delfi)
-
-print('periventricular tumors')
-print(median(periventricular.scores))
-print('other tumors')
-print(median(others.scores))
-
-wilcox.test(others.scores, periventricular.scores)
-
-# 	Wilcoxon rank sum exact test
-# data:  others.scores and periventricular.scores
-# W = 20, p-value = 0.08491
-# alternative hypothesis: true location shift is not equal to 0
-
-#---------------------#
-metadata$key = tolower(metadata$tumor_subset_pathology)
-
-astrocytoma.tumors =  metadata %>% filter(validation == FALSE) %>% filter(grepl('astro', key)) %>% pull(alternate_id)
-oligo.tumors = metadata %>% filter(validation == FALSE) %>% filter(grepl('oligo', key)) %>% pull(alternate_id)
-
-astrocytoma.scores = scores %>% filter(id %in% astrocytoma.tumors) %>% pull(artemis.delfi)
-oligo.scores = scores %>% filter(id %in% oligo.tumors) %>% pull(artemis.delfi)
-
-print('astrocytmas')
-print(median(astrocytoma.scores))
-print('oligodendrogliomas')
-print(median(oligo.scores))
-
-
-wilcox.test(astrocytoma.scores, oligo.scores)
-#---------------------#
-gbm.ids= metadata %>% filter(validation == FALSE) %>% filter(pathology._simplified == 'Grade IV') %>% pull(alternate_id)
-rec.ids= metadata %>% filter(validation == FALSE) %>% filter(pathology._simplified == 'Rec Grade IV') %>% pull(alternate_id)
-
-gbm.scores = scores %>% filter(id %in% gbm.ids) %>% pull(artemis.delfi)
-rec.scores = scores %>% filter(id %in% rec.ids) %>% pull(artemis.delfi)
-
-print('gbm scores')
-print(median(gbm.scores))
-
-print('rec gbm scores')
-print(median(rec.scores))
-
-wilcox.test(gbm.scores, rec.scores)
-#---------------------#
-small.ids = metadata %>% filter(validation == FALSE & type == 'cancer') %>%  filter(! is.na(volume)) %>% filter(volume < 4.19) %>% pull(alternate_id)
-large.ids = metadata %>% filter(validation == FALSE & type == 'cancer') %>%  filter(! is.na(volume)) %>% filter(volume >= 4.19) %>% pull(alternate_id)
-
-small.scores =  scores %>% filter(id %in% small.ids) %>% pull(artemis.delfi)
-print(thresh)
-length(which(small.scores >= thresh))
-print(median(small.scores))
-#---------------------#
-
-
 
 ```
