@@ -1,5 +1,5 @@
 ---
-title: "Figure 2. Score Distribution and Model Performance"
+title: "Figure 2. ARTEMIS-DELFI performance for detection of brain cancers"
 site: workflowr::wflow_site
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
