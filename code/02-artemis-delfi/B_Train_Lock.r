@@ -5,7 +5,7 @@ library(caret)
 library(recipes)
 library(devtools)
 library(data.table)
-load_all("/dcs04/scharpf/data/annapragada/useful.stuff.aa")
+# load_all("/dcs04/scharpf/data/annapragada/useful.stuff.aa")
 library(pROC)
 cohort_name<-"Brain"
 #fold="fold10"
@@ -15,6 +15,24 @@ test<-fread(paste0("../Cohorts/",cohort_name,"_Test.csv"),header=T) %>% select(-
 #test<-fread(paste0("../Cohorts/",cohort_name,fold,"_Test.csv"),header=T)%>% select(-V1)
 train_meta<-train
 test_meta<-test
+
+
+get_test_preds<-function(features,model) {
+  preds<-predict(model,features,type="prob")
+  res<-tibble(id=test$id,type=test$type,score=preds$cancer)
+  res
+}
+
+get_cv_preds<-function(features,model) {
+        features <- features %>% dplyr::mutate(rowIndex = 1:n())
+        ids <- features %>% select(id, rowIndex,type)
+        preds <- model$pred
+        preds <- preds %>% dplyr::group_by(rowIndex) %>% dplyr::summarize(score = mean(cancer))
+        preds <- inner_join(ids, preds, by="rowIndex")
+        preds <- preds %>% select(-rowIndex)
+        preds
+}
+
 
 glmnetGrid <- expand.grid(
     alpha = 1,
