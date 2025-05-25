@@ -1,13 +1,13 @@
 ---
 title: "Detection of brain cancer using genome-wide cell-free DNA fragmentation profiles and repeat landscapes"
 author: ""
-date: "09 September, 2024"
+date: "25 May, 2025"
 output:
   html_document:
     keep_md: yes
 ---
 
-The current repository contains the analysis source code for the manuscript on brain cancer detection using genome-wide cell-free DNA by Mathios et al. It is structured following the workflowr framework, where it can be built to generate report pages including all the figures and code.
+The current repository contains the analysis source code for the manuscript on brain cancer detection using genome-wide cell-free DNA by Mathios et al (PMID:40299319). It is structured following the workflowr framework, where it can be built to generate report pages including all the figures and code.
 
 Here is an overview of the directory structure:
 
@@ -62,6 +62,6 @@ Following list of READMEs explain the preprocessing steps, ARTEMIS-DELFI trainin
 
 #### Data
 
-The data used in the analysis is deposited with EGA accession number XYZ.
+The data used in the analysis is deposited with EGA accession number EGAD50000001445. 
 
 
