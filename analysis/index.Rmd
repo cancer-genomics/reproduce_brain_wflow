@@ -10,27 +10,40 @@ editor_options:
 
 
 #### Abstract
-Most patients with brain cancer are diagnosed at late stages and the development of blood-based assays for detecting brain tumors earlier have been largely unsuccessful.  In this study, we analyzed genome-wide cell-free (cfDNA) fragmentation profiles and repeat landscapes from the plasma of 505 individuals with and without brain cancer.  Machine learning analyses identified individuals with brain cancer with sensitivities of 62% (95% CI=38%-86%) for lower grade gliomas (grade I and II) and 72% (95% CI=63%-83%) for high-grade gliomas (grade III and IV) at 90% specificity.  These results were validated in an independent prospectively collected cohort.  We found that cfDNA fragmentome changes in patients with gliomas represented a combination of the epigenetic landscape of glioma cells and systemic white blood cell changes in the circulation.  These analyses highlight the unique properties of cfDNA in patients with brain cancer and open new avenues for noninvasive detection of these individuals.   
+Diagnostic delays in patients with brain cancer are common and can impact patient outcome. Development of a blood-based assay for detection of brain cancers could accelerate brain cancer diagnosis. In this study, we analyzed genome-wide cell-free (cfDNA) fragmentomes, including fragmentation profiles and repeat landscapes, from the plasma of individuals with (n=148) or without (n=357) brain cancer.  Machine learning analyses of cfDNA fragmentome features detected brain cancer across all grade gliomas (AUC=0.90, 95% CI: 0.87-0.93) and these results were validated in an independent prospectively collected cohort.  cfDNA fragmentome changes in patients with gliomas represented a combination of fragmentation profiles from glioma cells and altered white blood cell populations in the circulation.  These analyses reveal the properties of cfDNA in patients with brain cancer and open new avenues for noninvasive detection of these individuals.   
 
 Keywords: brain cancer, liquid biopsy, cfDNA fragmentation, glioblastoma 
 
-[Figure 1](../docs/Figure1.html)
 
-[Figure 2](../docs/Figure2.html)
+The code used to generate the figures can be found at: https://github.com/cancer-genomics/reproduce_brain_wflow
 
-[Figure 3](../docs/Figure3.html)
 
-[Figure 4](../docs/Figure4.html)
+[Figure 1](../docs/Figure1.html) Schematic overview of the study. 
 
-[Supplementary Figure 1](../docs/FigureS1.html)
+[Figure 2](../docs/Figure2.html) ARTEMIS-DELFI performance for detection of brain cancers. 
 
-[Supplementary Figure 2](../docs/FigureS2.html)
+[Figure 3](../docs/Figure3.html) Survival analyses of patients with molecularly defined untreated glioblastoma using ARTEMIS-DELFI model components. 
 
-[Supplementary Figure 3](../docs/FigureS3.html)
+[Figure 4](../docs/Figure4.html) cfDNA fragmentation and mutations in plasma of patients with high grade gliomas. 
 
-[Supplementary Figure 4](../docs/FigureS4.html)
+[Figure 5](../docs/Figure5.html) Origins of cfDNA fragmentation in high grade gliomas based on DECIFER analyses.
 
-[Supplementary Figure 5](../docs/FigureS5.html)
+[Supplementary Figure 1](../docs/FigureS1.html) Schematic representation of the Ensemble model architecture used for brain cancer prediction.
 
-[Supplementary Figure 6](../docs/FigureS6.html)
+[Supplementary Figure 2](../docs/FigureS2.html) Feature importance of the ARTEMIS-DELFI classifier by feature family. 
 
+[Supplementary Figure 3](../docs/FigureS3.html) ARTEMIS-DELFI score distribution across genomic library batch preparation. 
+
+[Supplementary Figure 4](../docs/FigureS4.html) Correlation of brain tumor size with ARTEMIS-DELFI scores.
+
+[Supplementary Figure 5](../docs/FigureS5.html) ARTEMIS-DELFI scores correlate with Ki-67 proliferation indices in tumor samples.
+
+[Supplementary Figure 6](../docs/FigureS6.html) Fragment length cumulative distributions of cfDNA in brain tumor patients by mutation type.
+
+[Supplementary Figure 7](../docs/FigureS7.html) Schematic representation of the DECIFER methodology. 
+
+[Supplementary Figure 8](../docs/FigureS8.html) Heatmap representation of TF RNA expression levels by tissue type. 
+
+[Supplementary Figure 9](../docs/FigureS9.html) DECIFER correlation plots from the Discovery and the Validation cohorts with different tumor and tissue types.
+
+[Supplementary Figure 10](../docs/FigureS10.html) Modelling the potential implementation of ARTEMIS-DELFI in the workup of headaches for brain tumors.
