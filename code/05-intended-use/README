@@ -1,0 +1,5 @@
+#! /bin/bash
+
+# Running intended use simulations using 10000 random seeds
+
+sbatch --array=1-9999 run_simulation_thread.sh
